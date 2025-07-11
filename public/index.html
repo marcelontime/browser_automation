@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intelligent Browser Automation</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="browser-view">
+            <div class="browser-header">
+                <button class="btn btn-secondary" onclick="goBack()">←</button>
+                <input type="url" class="url-bar" id="urlBar" placeholder="Enter URL..." onkeypress="handleUrlEnter(event)">
+                <button class="btn btn-primary" onclick="navigate()">Go</button>
+                <button class="btn btn-secondary" onclick="getPageInfo()">📄 Info</button>
+                <div class="control-mode-toggle">
+                    <button id="manualModeBtn" class="btn btn-outline" onclick="toggleManualMode()">👤 Manual</button>
+                    <button id="pauseBtn" class="btn btn-outline" onclick="pauseAutomation()">⏸️ Pause</button>
+                    <button id="syncBtn" class="btn btn-outline" onclick="syncBrowserState()">🔄 Sync</button>
+                </div>
+            </div>
+            <div class="browser-content">
+                <img id="screenshot" class="screenshot" alt="Browser Screenshot">
+                <div class="loading-overlay" id="loadingOverlay">
+                    <div class="loading-spinner"></div>
+                    <p>Loading browser...</p>
+                </div>
+            </div>
+            <div class="status-bar" id="statusBar">Ready</div>
+        </div>
+        
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h3>🤖 Automation Assistant</h3>
+                <p>Teach me through natural commands!</p>
+            </div>
+            
+            <div class="recording-controls">
+                <input type="text" id="scriptName" placeholder="Script name" class="variable-input">
+                <input type="text" id="scriptDescription" placeholder="Description" class="variable-input">
+                <button class="btn btn-success" id="recordBtn" onclick="toggleRecording()">🔴 Start Recording</button>
+            </div>
+            
+            <div class="scripts-section">
+                <h4>📚 Saved Scripts</h4>
+                <div class="scripts-list" id="scriptsList">
+                    <div class="no-scripts">No scripts saved yet</div>
+                </div>
+            </div>
+            
+            <div class="chat-container">
+                <div class="chat-header">
+                    <h4>💬 Natural Language Commands</h4>
+                    <button class="btn btn-sm btn-secondary" onclick="showExamples()">Examples</button>
+                </div>
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input-container">
+                    <textarea 
+                        id="chatInput" 
+                        class="chat-input" 
+                        placeholder="Type your instruction... e.g., 'Click the login button' or 'Type John Smith in the name field'"
+                        onkeypress="handleChatEnter(event)"></textarea>
+                    <button class="btn btn-primary chat-send-btn" onclick="sendChatMessage()">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="recordingIndicator" class="recording-indicator" style="display: none;">
+        🔴 RECORDING
+    </div>
+
+    <!-- Variables Modal -->
+    <div id="variablesModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>⚙️ Script Variables</h3>
+                <button class="btn btn-secondary" onclick="closeVariablesModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="variablesForm"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="saveAndExecuteScript()">Save & Execute</button>
+                <button class="btn btn-secondary" onclick="closeVariablesModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="helpModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📖 Help & Examples</h3>
+                <button class="btn btn-secondary" onclick="closeHelpModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <h4>Natural Language Commands:</h4>
+                <ul class="help-list">
+                    <li><strong>Click:</strong> "click the login button", "click on submit"</li>
+                    <li><strong>Type:</strong> "type John Smith in the name field"</li>
+                    <li><strong>Navigate:</strong> "navigate to google.com"</li>
+                    <li><strong>Select:</strong> "select United States from country dropdown"</li>
+                    <li><strong>Wait:</strong> "wait 3 seconds"</li>
+                    <li><strong>Scroll:</strong> "scroll down", "scroll up"</li>
+                </ul>
+                
+                <h4>Recording Scripts:</h4>
+                <ol class="help-list">
+                    <li>Enter script name and description</li>
+                    <li>Click "Start Recording"</li>
+                    <li>Perform actions or give commands</li>
+                    <li>Click "Stop Recording" to save</li>
+                </ol>
+                
+                <h4>Using Variables:</h4>
+                <p>Scripts can use variables like {{name}}, {{date}}, {{email}} that you can customize before execution.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 

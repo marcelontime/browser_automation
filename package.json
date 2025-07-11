@@ -1,0 +1,49 @@
+{
+  "name": "intelligent-browser-automation",
+  "version": "1.0.0",
+  "description": "Advanced browser automation system with recording, playback, and natural language control",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "setup": "node setup.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "puppeteer": "^21.5.2",
+    "sharp": "^0.32.6",
+    "cors": "^2.8.5",
+    "body-parser": "^1.20.2",
+    "@anthropic-ai/sdk": "^0.24.3",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "automation",
+    "browser",
+    "ai",
+    "recording",
+    "playback",
+    "puppeteer",
+    "websocket",
+    "natural-language",
+    "rpa"
+  ],
+  "author": "Browser Automation Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/browser-automation.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/browser-automation/issues"
+  },
+  "homepage": "https://github.com/yourusername/browser-automation#readme"
+} 

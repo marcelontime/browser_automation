@@ -1,0 +1,280 @@
+{
+  "name": "Fernando de Noronha Family Trip",
+  "description": "Complete family trip automation for 4 people from Rio de Janeiro to Fernando de Noronha",
+  "variables": {
+    "departureCity": "Rio de Janeiro",
+    "destinationCity": "Fernando de Noronha",
+    "departureDate": "2024-10-20",
+    "returnDate": "2024-10-27",
+    "adults": "4",
+    "children": "0",
+    "infants": "0",
+    "passengerName1": "João Silva",
+    "passengerName2": "Maria Silva",
+    "passengerName3": "Pedro Silva",
+    "passengerName4": "Ana Silva",
+    "email": "familia.silva@email.com",
+    "phone": "(21) 99999-9999",
+    "document1": "123.456.789-00",
+    "document2": "987.654.321-00",
+    "document3": "456.789.123-00",
+    "document4": "789.123.456-00",
+    "hotelName": "Pousada Maravilha",
+    "hotelCheckIn": "2024-10-20",
+    "hotelCheckOut": "2024-10-27",
+    "rooms": "2",
+    "budget": "15000"
+  },
+  "steps": [
+    {
+      "action": "navigate",
+      "target": "https://www.latamairlines.com/br/pt",
+      "description": "Navigate to LATAM Airlines Brazil"
+    },
+    {
+      "action": "wait",
+      "target": "3000",
+      "description": "Wait for page to load completely"
+    },
+    {
+      "action": "click",
+      "target": "departure city field",
+      "description": "Click on departure city field",
+      "fallback": "input[placeholder*='origem'], input[placeholder*='partida'], input[id*='origin'], input[name*='from']"
+    },
+    {
+      "action": "type",
+      "target": "{{departureCity}}",
+      "description": "Type departure city"
+    },
+    {
+      "action": "click",
+      "target": "Rio de Janeiro option",
+      "description": "Select Rio de Janeiro from dropdown",
+      "fallback": "li:contains('Rio de Janeiro'), option:contains('Rio de Janeiro')"
+    },
+    {
+      "action": "click",
+      "target": "destination city field",
+      "description": "Click on destination city field",
+      "fallback": "input[placeholder*='destino'], input[id*='destination'], input[name*='to']"
+    },
+    {
+      "action": "type",
+      "target": "{{destinationCity}}",
+      "description": "Type destination city"
+    },
+    {
+      "action": "click",
+      "target": "Fernando de Noronha option",
+      "description": "Select Fernando de Noronha from dropdown",
+      "fallback": "li:contains('Fernando de Noronha'), option:contains('Fernando de Noronha')"
+    },
+    {
+      "action": "click",
+      "target": "departure date field",
+      "description": "Click on departure date field",
+      "fallback": "input[placeholder*='ida'], input[id*='departure'], input[name*='departure']"
+    },
+    {
+      "action": "type",
+      "target": "{{departureDate}}",
+      "description": "Enter departure date"
+    },
+    {
+      "action": "click",
+      "target": "return date field",
+      "description": "Click on return date field",
+      "fallback": "input[placeholder*='volta'], input[id*='return'], input[name*='return']"
+    },
+    {
+      "action": "type",
+      "target": "{{returnDate}}",
+      "description": "Enter return date"
+    },
+    {
+      "action": "click",
+      "target": "passengers field",
+      "description": "Click on passengers field",
+      "fallback": "button:contains('passageiro'), button:contains('adulto'), input[name*='passenger']"
+    },
+    {
+      "action": "click",
+      "target": "adult plus button",
+      "description": "Increase adult count to 4",
+      "repeat": 3,
+      "fallback": "button:contains('+'), button[aria-label*='adulto']"
+    },
+    {
+      "action": "click",
+      "target": "search flights button",
+      "description": "Click search flights button",
+      "fallback": "button:contains('Buscar'), button:contains('Pesquisar'), button[type='submit']"
+    },
+    {
+      "action": "wait",
+      "target": "5000",
+      "description": "Wait for flight results to load"
+    },
+    {
+      "action": "click",
+      "target": "first flight option",
+      "description": "Select first available flight",
+      "fallback": "button:contains('Selecionar'), .flight-option:first-child button"
+    },
+    {
+      "action": "click",
+      "target": "continue button",
+      "description": "Continue to passenger details",
+      "fallback": "button:contains('Continuar'), button:contains('Próximo')"
+    },
+    {
+      "action": "type",
+      "target": "passenger 1 name",
+      "text": "{{passengerName1}}",
+      "description": "Enter first passenger name",
+      "fallback": "input[name*='passenger1'], input[placeholder*='nome']"
+    },
+    {
+      "action": "type",
+      "target": "passenger 1 document",
+      "text": "{{document1}}",
+      "description": "Enter first passenger document",
+      "fallback": "input[name*='document1'], input[placeholder*='cpf']"
+    },
+    {
+      "action": "type",
+      "target": "passenger 2 name",
+      "text": "{{passengerName2}}",
+      "description": "Enter second passenger name"
+    },
+    {
+      "action": "type",
+      "target": "passenger 2 document",
+      "text": "{{document2}}",
+      "description": "Enter second passenger document"
+    },
+    {
+      "action": "type",
+      "target": "passenger 3 name",
+      "text": "{{passengerName3}}",
+      "description": "Enter third passenger name"
+    },
+    {
+      "action": "type",
+      "target": "passenger 3 document",
+      "text": "{{document3}}",
+      "description": "Enter third passenger document"
+    },
+    {
+      "action": "type",
+      "target": "passenger 4 name",
+      "text": "{{passengerName4}}",
+      "description": "Enter fourth passenger name"
+    },
+    {
+      "action": "type",
+      "target": "passenger 4 document",
+      "text": "{{document4}}",
+      "description": "Enter fourth passenger document"
+    },
+    {
+      "action": "type",
+      "target": "contact email",
+      "text": "{{email}}",
+      "description": "Enter contact email",
+      "fallback": "input[type='email'], input[name*='email']"
+    },
+    {
+      "action": "type",
+      "target": "contact phone",
+      "text": "{{phone}}",
+      "description": "Enter contact phone",
+      "fallback": "input[type='tel'], input[name*='phone']"
+    },
+    {
+      "action": "navigate",
+      "target": "https://www.booking.com",
+      "description": "Navigate to Booking.com for hotel search"
+    },
+    {
+      "action": "wait",
+      "target": "3000",
+      "description": "Wait for Booking.com to load"
+    },
+    {
+      "action": "click",
+      "target": "destination field",
+      "description": "Click on hotel destination field",
+      "fallback": "input[placeholder*='destino'], input[name*='ss']"
+    },
+    {
+      "action": "type",
+      "target": "{{destinationCity}}",
+      "description": "Type hotel destination"
+    },
+    {
+      "action": "click",
+      "target": "check-in date",
+      "description": "Click check-in date field",
+      "fallback": "input[placeholder*='entrada'], input[name*='checkin']"
+    },
+    {
+      "action": "type",
+      "target": "{{hotelCheckIn}}",
+      "description": "Enter check-in date"
+    },
+    {
+      "action": "click",
+      "target": "check-out date",
+      "description": "Click check-out date field",
+      "fallback": "input[placeholder*='saída'], input[name*='checkout']"
+    },
+    {
+      "action": "type",
+      "target": "{{hotelCheckOut}}",
+      "description": "Enter check-out date"
+    },
+    {
+      "action": "click",
+      "target": "guests field",
+      "description": "Click on guests field",
+      "fallback": "button:contains('hóspede'), button:contains('quarto')"
+    },
+    {
+      "action": "click",
+      "target": "rooms plus button",
+      "description": "Set rooms to 2",
+      "fallback": "button:contains('+'), button[aria-label*='quarto']"
+    },
+    {
+      "action": "click",
+      "target": "search hotels button",
+      "description": "Search for hotels",
+      "fallback": "button:contains('Pesquisar'), button[type='submit']"
+    },
+    {
+      "action": "wait",
+      "target": "5000",
+      "description": "Wait for hotel results"
+    },
+    {
+      "action": "click",
+      "target": "filter by price",
+      "description": "Apply price filter",
+      "fallback": "input[type='range'], button:contains('Filtrar')"
+    },
+    {
+      "action": "click",
+      "target": "first hotel option",
+      "description": "Select first available hotel",
+      "fallback": ".hotel-item:first-child a, .sr_item:first-child a"
+    },
+    {
+      "action": "click",
+      "target": "reserve button",
+      "description": "Click reserve button",
+      "fallback": "button:contains('Reservar'), button:contains('Reserve')"
+    }
+  ]
+} 
