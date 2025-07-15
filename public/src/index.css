@@ -1,0 +1,8 @@
+/* Import our modern design system */
+@import './styles/variables.css';
+@import './styles/globals.css';
+
+/* Legacy styles for compatibility */
+code {
+  font-family: var(--font-family-mono);
+}

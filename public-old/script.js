@@ -63,37 +63,46 @@ function setupKeyboardShortcuts() {
 }
 
 // WebSocket connection management
-function connect() {
-    updateStatus('🔄 Connecting...');
+async function connect() {
+  updateStatus('🔄 Connecting...');
+  
+  try {
+    const res = await fetch('/get-token');
+    const data = await res.json();
+    const token = data.token;
     
-    ws = new WebSocket('ws://localhost:7079');
+    ws = new WebSocket(`ws://localhost:7079?token=${token}`);
     
     ws.onopen = () => {
-        updateStatus('✅ Connected');
-        connectionRetryCount = 0;
-        console.log('Connected to server');
+      updateStatus('✅ Connected');
+      connectionRetryCount = 0;
+      console.log('Connected to server');
     };
     
     ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        handleMessage(data);
+      const data = JSON.parse(event.data);
+      handleMessage(data);
     };
     
     ws.onclose = () => {
-        updateStatus('❌ Disconnected');
-        if (connectionRetryCount < maxRetries) {
-            connectionRetryCount++;
-            updateStatus(`🔄 Reconnecting... (${connectionRetryCount}/${maxRetries})`);
-            setTimeout(connect, 3000);
-        } else {
-            updateStatus('❌ Connection failed - Please refresh the page');
-        }
+      updateStatus('❌ Disconnected');
+      if (connectionRetryCount < maxRetries) {
+        connectionRetryCount++;
+        updateStatus(`🔄 Reconnecting... (${connectionRetryCount}/${maxRetries})`);
+        setTimeout(connect, 3000);
+      } else {
+        updateStatus('❌ Connection failed - Please refresh the page');
+      }
     };
     
     ws.onerror = (error) => {
-        updateStatus('❌ Connection error');
-        console.error('WebSocket error:', error);
+      updateStatus('❌ Connection error');
+      console.error('WebSocket error:', error);
     };
+  } catch (err) {
+    updateStatus('❌ Auth error');
+    console.error('Auth error:', err);
+  }
 }
 
 function handleMessage(data) {

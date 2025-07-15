@@ -1,0 +1,53 @@
+{
+  "url": "chrome-error://chromewebdata/",
+  "cookies": [
+    {
+      "name": "_ga",
+      "value": "GA1.1.798039037.1752531774",
+      "domain": ".azut1-br-digital.azurewebsites.net",
+      "path": "/",
+      "expires": 1787091774.458132,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_hjSessionUser_3554474",
+      "value": "eyJpZCI6IjhiNTU5MmE2LTZiMGMtNWNjZS1iYzA1LTA3MTJjM2U0N2FkYyIsImNyZWF0ZWQiOjE3NTI1MzE3ODM1NzksImV4aXN0aW5nIjp0cnVlfQ==",
+      "domain": ".akadseguros.com.br",
+      "path": "/",
+      "expires": 1784067783,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_hjSession_3554474",
+      "value": "eyJpZCI6IjcxNGRiNDc0LTMxMzctNGNjOC1iODI5LWRhYTBmYjE3ZTU4YyIsImMiOjE3NTI1MzE3ODM1ODAsInMiOjEsInIiOjEsInNiIjowLCJzciI6MCwic2UiOjAsImZzIjoxLCJzcCI6MX0=",
+      "domain": ".akadseguros.com.br",
+      "path": "/",
+      "expires": 1752533616,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ga_ZN2F9ZH35P",
+      "value": "GS2.1.s1752531774$o1$g1$t1752532619$j60$l0$h0",
+      "domain": ".azut1-br-digital.azurewebsites.net",
+      "path": "/",
+      "expires": 1787092619.809379,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "localStorage": {},
+  "sessionStorage": {},
+  "formData": {},
+  "variables": {},
+  "currentStep": 0,
+  "totalSteps": 0,
+  "automation": null,
+  "timestamp": 1752532681049
+}

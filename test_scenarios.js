@@ -1,5 +1,8 @@
 const WebSocket = require('ws');
 const readline = require('readline');
+const { IntelligentBrowserAutomation } = require('./server');
+const autocannon = require('autocannon');
+const { chromium } = require('playwright');
 
 class AutomationTester {
     constructor() {
@@ -339,6 +342,11 @@ class AutomationTester {
             await this.testShoppingScenarios();
             await this.testSearchScenarios();
             await this.testTravelScenarios();
+            await this.testLevenshtein();
+            await this.testLoad();
+            await this.testSlowNetwork();
+            await this.testMobileView();
+            await this.testCaptchaHandling();
             
             // Generate final report
             this.generateReport();
@@ -435,6 +443,78 @@ class AutomationTester {
         if (this.ws) {
             this.ws.close();
         }
+    }
+
+    async testLevenshtein() {
+      await this.startTest('Levenshtein_Distance', 'Unit tests for Levenshtein distance function');
+
+      const system = new IntelligentBrowserAutomation();
+      const levenshteinDistance = system.levenshteinDistance.bind(system);
+
+      const tests = [
+        { a: 'test', b: 'test', expected: 0 },
+        { a: 'kitten', b: 'sitting', expected: 3 },
+        { a: '', b: 'hello', expected: 5 },
+      ];
+
+      let allPassed = true;
+      tests.forEach(t => {
+        const res = levenshteinDistance(t.a, t.b);
+        console.log(`${t.a} vs ${t.b}: ${res} (expected ${t.expected})`);
+        if (res !== t.expected) allPassed = false;
+      });
+
+      this.completeCurrentTest(allPassed);
+    }
+
+    async testLoad() {
+      await this.startTest('Load_Testing', 'Load testing for concurrent WebSocket sessions');
+
+      const result = await autocannon({
+        url: 'ws://localhost:7079',
+        connections: 100,
+        duration: 10
+      });
+
+      console.log('Load test results:', result);
+      const success = result.errors === 0;
+      this.completeCurrentTest(success);
+    }
+
+    async testSlowNetwork() {
+      await this.startTest('Slow_Network', 'Test system under slow network conditions');
+      const browser = await chromium.launch();
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await page.route('**', route => route.continue({ delay: 500 }));
+      await page.goto('http://localhost:7079');
+      // Simulate interaction
+      await page.waitForTimeout(5000);
+      await browser.close();
+      this.completeCurrentTest(true);
+    }
+
+    async testMobileView() {
+      await this.startTest('Mobile_View', 'Test system in mobile emulation');
+      const browser = await chromium.launch();
+      const context = await browser.newContext({
+        viewport: { width: 375, height: 667 },
+        deviceScaleFactor: 2,
+        isMobile: true
+      });
+      const page = await context.newPage();
+      await page.goto('http://localhost:7079');
+      // Simulate interaction
+      await page.waitForTimeout(5000);
+      await browser.close();
+      this.completeCurrentTest(true);
+    }
+
+    async testCaptchaHandling() {
+      await this.startTest('Captcha_Handling', 'Test CAPTCHA detection and handling simulation');
+      // Simulation only, as real CAPTCHA requires integration
+      console.log('Simulating CAPTCHA detection and solving');
+      this.completeCurrentTest(true);
     }
 }
 

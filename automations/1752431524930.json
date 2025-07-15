@@ -1,0 +1,32 @@
+{
+  "id": "1752431524930",
+  "name": "Recording 13/07/2025, 15:32:21",
+  "description": "Recorded automation",
+  "status": "ready",
+  "stepCount": 2,
+  "variableCount": 0,
+  "steps": [
+    {
+      "timestamp": "2025-07-13T18:32:14.914Z",
+      "action": {
+        "type": "navigate",
+        "url": "https://httpbin.org/json"
+      },
+      "fieldValue": null,
+      "fieldType": "action",
+      "selector": null
+    },
+    {
+      "timestamp": "2025-07-13T18:32:15.602Z",
+      "action": {
+        "type": "navigate",
+        "url": "https://httpbin.org/json"
+      },
+      "fieldValue": null,
+      "fieldType": "action",
+      "selector": null
+    }
+  ],
+  "createdAt": "2025-07-13T18:32:21.935Z",
+  "variables": []
+}

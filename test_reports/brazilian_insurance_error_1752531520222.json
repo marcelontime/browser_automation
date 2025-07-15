@@ -1,0 +1,25 @@
+{
+  "testName": "Brazilian Insurance Automation Test",
+  "status": "FAILED",
+  "error": "Automation engine not initialized",
+  "stack": "Error: Automation engine not initialized\n    at responseHandler (D:\\browser_automation\\test_brazilian_insurance_automation.js:188:28)\n    at D:\\browser_automation\\test_brazilian_insurance_automation.js:144:17\n    at Set.forEach (<anonymous>)\n    at BrazilianInsuranceAutomationTester.handleMessage (D:\\browser_automation\\test_brazilian_insurance_automation.js:142:31)\n    at WebSocket.<anonymous> (D:\\browser_automation\\test_brazilian_insurance_automation.js:85:26)\n    at WebSocket.emit (node:events:518:28)\n    at Receiver.receiverOnMessage (D:\\browser_automation\\node_modules\\ws\\lib\\websocket.js:1220:20)\n    at Receiver.emit (node:events:518:28)\n    at Receiver.dataMessage (D:\\browser_automation\\node_modules\\ws\\lib\\receiver.js:596:14)\n    at Receiver.getData (D:\\browser_automation\\node_modules\\ws\\lib\\receiver.js:496:10)",
+  "completedSteps": 1,
+  "totalSteps": 12,
+  "timestamp": "2025-07-14T22:18:40.222Z",
+  "results": [
+    {
+      "timestamp": "2025-07-14T22:18:40.198Z",
+      "step": 1,
+      "message": "Connected to Stagehand Browser Automation",
+      "type": "status",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:18:40.221Z",
+      "step": 1,
+      "message": "Automation engine not initialized",
+      "type": "error",
+      "success": true
+    }
+  ]
+}

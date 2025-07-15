@@ -1,0 +1,522 @@
+{
+  "testName": "Brazilian Insurance Automation Test",
+  "duration": "57.496s",
+  "totalSteps": 12,
+  "completedSteps": 14,
+  "successRate": "116.7%",
+  "timestamp": "2025-07-14T22:11:14.054Z",
+  "results": [
+    {
+      "timestamp": "2025-07-14T22:10:16.817Z",
+      "step": 1,
+      "message": "Connected to Stagehand Browser Automation",
+      "type": "status",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:16.824Z",
+      "step": 1,
+      "message": "Automation engine not initialized",
+      "type": "error",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:19.807Z",
+      "step": 2,
+      "message": "Automation engine not initialized",
+      "type": "error",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:20.334Z",
+      "step": 2,
+      "message": "✅ Stagehand engine initialized and ready",
+      "type": "engine_ready",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:22.884Z",
+      "step": 3,
+      "message": "🤖 Processing: \"type \"381.151.977-85\" in the CPF field\"",
+      "type": "processing",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:23.625Z",
+      "step": 3,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:24.418Z",
+      "step": 3,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:25.931Z",
+      "step": 4,
+      "message": "🤖 Processing: \"type \"akad@2025\" in the password field\"",
+      "type": "processing",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:26.216Z",
+      "step": 4,
+      "type": "instruction_result",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:26.218Z",
+      "step": 4,
+      "message": "Action completed",
+      "type": "chat_message",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:26.421Z",
+      "step": 4,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:27.289Z",
+      "step": 4,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:27.729Z",
+      "step": 4,
+      "type": "instruction_result",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:27.730Z",
+      "step": 4,
+      "message": "Action completed",
+      "type": "chat_message",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:28.423Z",
+      "step": 4,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:28.796Z",
+      "step": 4,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:28.942Z",
+      "step": 5,
+      "message": "🤖 Processing: \"click the login button\"",
+      "type": "processing",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:30.428Z",
+      "step": 5,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:32.476Z",
+      "step": 5,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:34.468Z",
+      "step": 5,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:34.597Z",
+      "step": 5,
+      "type": "instruction_result",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:34.598Z",
+      "step": 5,
+      "message": "Action completed",
+      "type": "chat_message",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:35.678Z",
+      "step": 5,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:36.472Z",
+      "step": 5,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:36.962Z",
+      "step": 6,
+      "message": "🤖 Processing: \"click the \"New Quote\" button or navigate to create new quote\"",
+      "type": "processing",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:38.487Z",
+      "step": 6,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:39.972Z",
+      "step": 7,
+      "message": "🤖 Processing: \"select \"Pessoa Física\" from person type options\"",
+      "type": "processing",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:40.489Z",
+      "step": 7,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:41.317Z",
+      "step": 7,
+      "type": "instruction_result",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:41.317Z",
+      "step": 7,
+      "message": "Action completed",
+      "type": "chat_message",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:42.376Z",
+      "step": 7,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:42.499Z",
+      "step": 7,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:42.986Z",
+      "step": 8,
+      "message": "🤖 Processing: \"select \"Advogados\" from profession dropdown\"",
+      "type": "processing",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:44.100Z",
+      "step": 8,
+      "type": "instruction_result",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:44.101Z",
+      "step": 8,
+      "message": "Action completed",
+      "type": "chat_message",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:44.496Z",
+      "step": 8,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:44.781Z",
+      "step": 8,
+      "type": "instruction_result",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:44.782Z",
+      "step": 8,
+      "message": "Action completed",
+      "type": "chat_message",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:45.172Z",
+      "step": 8,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:45.831Z",
+      "step": 8,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:45.996Z",
+      "step": 9,
+      "message": "🤖 Processing: \"type \"Endosso Simulado\" in the name field\"",
+      "type": "processing",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:46.499Z",
+      "step": 9,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:47.844Z",
+      "step": 9,
+      "type": "instruction_result",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:47.845Z",
+      "step": 9,
+      "message": "Action completed",
+      "type": "chat_message",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:48.525Z",
+      "step": 9,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:48.902Z",
+      "step": 9,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:49.004Z",
+      "step": 10,
+      "message": "🤖 Processing: \"type \"simulador@gmail.com\" in the email field\"",
+      "type": "processing",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:50.539Z",
+      "step": 10,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:51.297Z",
+      "step": 10,
+      "type": "instruction_result",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:51.298Z",
+      "step": 10,
+      "message": "Action completed",
+      "type": "chat_message",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:52.010Z",
+      "step": 11,
+      "message": "🤖 Processing: \"select \"Advocacia Geral\" from activity dropdown\"",
+      "type": "processing",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:52.359Z",
+      "step": 11,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:52.542Z",
+      "step": 11,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:53.801Z",
+      "step": 11,
+      "type": "instruction_result",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:53.801Z",
+      "step": 11,
+      "message": "Action completed",
+      "type": "chat_message",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:54.560Z",
+      "step": 11,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:54.860Z",
+      "step": 11,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:55.024Z",
+      "step": 12,
+      "message": "🤖 Processing: \"select \"R$ 100.000,00\" from coverage amount dropdown\"",
+      "type": "processing",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:56.556Z",
+      "step": 12,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:57.718Z",
+      "step": 12,
+      "type": "instruction_result",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:57.719Z",
+      "step": 12,
+      "message": "Action completed",
+      "type": "chat_message",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:58.036Z",
+      "step": 13,
+      "message": "🤖 Processing: \"select \"Nenhum\" from 5-year claims history dropdown\"",
+      "type": "processing",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:58.557Z",
+      "step": 13,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:10:58.788Z",
+      "step": 13,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:11:00.559Z",
+      "step": 13,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:11:00.834Z",
+      "step": 13,
+      "type": "instruction_result",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:11:00.835Z",
+      "step": 13,
+      "message": "Action completed",
+      "type": "chat_message",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:11:01.047Z",
+      "step": 14,
+      "message": "🤖 Processing: \"click the \"Calculate Quote\" or \"Generate Quote\" button\"",
+      "type": "processing",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:11:01.894Z",
+      "step": 14,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:11:02.578Z",
+      "step": 14,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:11:04.575Z",
+      "step": 14,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:11:06.576Z",
+      "step": 14,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:11:08.530Z",
+      "step": 14,
+      "type": "instruction_result",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:11:08.531Z",
+      "step": 14,
+      "message": "Action completed",
+      "type": "chat_message",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:11:08.588Z",
+      "step": 14,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:11:09.594Z",
+      "step": 14,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:11:10.598Z",
+      "step": 14,
+      "type": "screenshot",
+      "success": true
+    },
+    {
+      "timestamp": "2025-07-14T22:11:12.609Z",
+      "step": 14,
+      "type": "screenshot",
+      "success": true
+    }
+  ],
+  "testData": {
+    "cpf": "381.151.977-85",
+    "password": "akad@2025",
+    "nome_completo": "Endosso Simulado",
+    "email": "simulador@gmail.com",
+    "pessoa_tipo": "Pessoa Física",
+    "profissao": "Advogados",
+    "atividade": "Advocacia Geral",
+    "importancia_segurada": "R$ 100.000,00",
+    "sinistros_5_anos": "Nenhum",
+    "sinistros_12_meses": "Nenhum",
+    "soma_sinistros": "0,00",
+    "retroatividade": "1 ano",
+    "franquia": "10% dos prejuízos com mínimo de R$ 2.000,00",
+    "honorarios": "Normal"
+  }
+}

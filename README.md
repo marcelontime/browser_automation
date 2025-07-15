@@ -194,7 +194,7 @@ LOG_LEVEL=info              # Logging level
 ```
 
 ### Claude Integration
-The system now uses **Claude Sonnet 4** for enhanced natural language processing:
+The system now uses **Claude Sonnet 4** (claude-sonnet-4-20250514) for enhanced natural language processing with minimal setup (max_tokens: 20000):
 - **Intelligent Command Parsing**: Better understanding of complex instructions
 - **Smart Variable Detection**: Automatically identifies reusable parameters
 - **Context-Aware Actions**: Understands intent behind commands

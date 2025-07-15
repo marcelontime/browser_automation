@@ -1,0 +1,59 @@
+{
+  "id": "1752429002708",
+  "name": "Recording 13/07/2025, 14:52:27",
+  "description": "Recorded automation",
+  "status": "ready",
+  "stepCount": 6,
+  "variableCount": 1,
+  "steps": [
+    {
+      "timestamp": "2025-07-13T17:50:14.247Z",
+      "action": {
+        "type": "navigate",
+        "url": "# URLs"
+      }
+    },
+    {
+      "timestamp": "2025-07-13T17:50:58.536Z",
+      "action": "error"
+    },
+    {
+      "timestamp": "2025-07-13T17:51:19.660Z",
+      "action": {
+        "type": "navigate",
+        "url": "https://azut1-br-digital.azurewebsites.net/login"
+      }
+    },
+    {
+      "timestamp": "2025-07-13T17:51:40.798Z",
+      "action": "variable_definition"
+    },
+    {
+      "timestamp": "2025-07-13T17:52:01.668Z",
+      "action": {
+        "type": "click",
+        "selector": "in Continuar sem protecao",
+        "description": "click in Continuar sem protecao"
+      }
+    },
+    {
+      "timestamp": "2025-07-13T17:52:21.928Z",
+      "action": {
+        "type": "click",
+        "selector": "X",
+        "description": "cole left side modal , click on the X"
+      }
+    }
+  ],
+  "createdAt": "2025-07-13T17:52:27.151Z",
+  "variables": [
+    {
+      "name": "LOGIN_URL",
+      "type": "url",
+      "defaultValue": "",
+      "description": "The URL for the login page",
+      "required": true,
+      "validation": "^(https?:\\/\\/)?([\\da-z.-]+)\\.([a-z.]{2,6})([\\/\\w .-]*)*\\/?$"
+    }
+  ]
+}
