@@ -1,83 +1,70 @@
 import React from 'react';
 import styled from 'styled-components';
 
-interface CardProps {
-  children: React.ReactNode;
-  padding?: 'sm' | 'md' | 'lg';
-  shadow?: 'sm' | 'md' | 'lg' | 'xl';
-  hover?: boolean;
-  className?: string;
-  style?: React.CSSProperties;
-  onClick?: () => void;
-}
-
-const getPaddingSize = (padding: string) => {
-  switch (padding) {
-    case 'sm': return 'var(--space-4)';
-    case 'md': return 'var(--space-6)';
-    case 'lg': return 'var(--space-8)';
-    default: return 'var(--space-6)';
-  }
-};
-
-const getShadowSize = (shadow: string) => {
-  switch (shadow) {
-    case 'sm': return 'var(--shadow-sm)';
-    case 'md': return 'var(--shadow-md)';
-    case 'lg': return 'var(--shadow-lg)';
-    case 'xl': return 'var(--shadow-xl)';
-    default: return 'var(--shadow-sm)';
-  }
-};
-
-const StyledCard = styled.div<{ 
-  $padding: string; 
-  $shadow: string; 
-  $hover: boolean;
-  $clickable: boolean;
-}>`
+const CardContainer = styled.div`
   background: white;
   border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-xl);
-  padding: ${props => getPaddingSize(props.$padding)};
-  box-shadow: ${props => getShadowSize(props.$shadow)};
-  transition: all var(--transition-fast);
-  
-  ${props => props.$clickable && `
-    cursor: pointer;
-  `}
-  
-  ${props => props.$hover && `
-    &:hover {
-      border-color: var(--primary-300);
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-lg);
-    }
-  `}
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
 `;
 
-export const Card: React.FC<CardProps> = ({
-  children,
-  padding = 'md',
-  shadow = 'sm',
-  hover = false,
-  className,
-  style,
-  onClick
-}) => {
-  return (
-    <StyledCard
-      $padding={padding}
-      $shadow={shadow}
-      $hover={hover}
-      $clickable={!!onClick}
-      className={className}
-      style={style}
-      onClick={onClick}
-    >
-      {children}
-    </StyledCard>
-  );
-};
+const CardHeaderContainer = styled.div`
+  padding: var(--space-6);
+  border-bottom: 1px solid var(--neutral-100);
+`;
 
-export default Card; 
+const CardTitleElement = styled.h3`
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--neutral-900);
+  margin: 0;
+`;
+
+const CardContentContainer = styled.div`
+  padding: var(--space-6);
+`;
+
+interface CardProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+interface CardHeaderProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+interface CardTitleProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+interface CardContentProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+export const Card: React.FC<CardProps> = ({ children, className }) => (
+  <CardContainer className={className}>
+    {children}
+  </CardContainer>
+);
+
+export const CardHeader: React.FC<CardHeaderProps> = ({ children, className }) => (
+  <CardHeaderContainer className={className}>
+    {children}
+  </CardHeaderContainer>
+);
+
+export const CardTitle: React.FC<CardTitleProps> = ({ children, className }) => (
+  <CardTitleElement className={className}>
+    {children}
+  </CardTitleElement>
+);
+
+export const CardContent: React.FC<CardContentProps> = ({ children, className }) => (
+  <CardContentContainer className={className}>
+    {children}
+  </CardContentContainer>
+);

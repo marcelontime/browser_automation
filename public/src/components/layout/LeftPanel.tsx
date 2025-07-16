@@ -1,7 +1,7 @@
 import React from 'react';
 import styled from 'styled-components';
-import Card from '../ui/Card';
-import Button from '../ui/Button';
+import { Card } from '../ui/Card';
+import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 
 const PanelContainer = styled.aside`

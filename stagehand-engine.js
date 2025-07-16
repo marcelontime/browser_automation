@@ -2,6 +2,10 @@ const { Stagehand } = require('@browserbasehq/stagehand');
 const { z } = require('zod');
 const RobustElementInteraction = require('./modules/browser/element-interaction');
 const ComprehensiveErrorRecovery = require('./modules/browser/error-recovery');
+const VariableAnalyzer = require('./modules/analysis/variable-analyzer');
+const ElementContextAnalyzer = require('./modules/analysis/element-context-analyzer');
+const ValidationRuleGenerator = require('./modules/analysis/validation-rule-generator');
+const { RecordingSession, Variable, VariableTypes } = require('./modules/storage/models');
 
 class StagehandAutomationEngine {
     constructor(options = {}) {
@@ -20,6 +24,14 @@ class StagehandAutomationEngine {
         this.processingInstruction = false;
         this.retryCount = 0;
         this.maxRetries = 2; // Add max retries limit
+        
+        // Enhanced recording capabilities
+        this.isRecording = false;
+        this.currentRecordingSession = null;
+        this.recordedActions = [];
+        this.variableAnalyzer = null;
+        this.elementContextAnalyzer = null;
+        this.validationRuleGenerator = null;
         
         // Import error recovery module
         this.errorRecovery = null;
@@ -72,6 +84,25 @@ class StagehandAutomationEngine {
                     pageLoadTimeout: 45000
                 });
             }
+            
+            // Initialize variable analysis components
+            this.variableAnalyzer = new VariableAnalyzer({
+                confidenceThreshold: 0.7,
+                enableAdvancedPatterns: true,
+                sensitiveDataDetection: true
+            });
+            
+            this.elementContextAnalyzer = new ElementContextAnalyzer({
+                enableSemanticAnalysis: true,
+                enableSiblingAnalysis: true,
+                enableFormAnalysis: true
+            });
+            
+            this.validationRuleGenerator = new ValidationRuleGenerator({
+                strictValidation: true,
+                enableCustomPatterns: true,
+                supportMultipleLanguages: true
+            });
             
             this.isInitialized = true;
             
@@ -648,6 +679,608 @@ class StagehandAutomationEngine {
         }
         
         return this.errorRecovery.getRecoveryStats();
+    }
+
+    // ===== ENHANCED RECORDING METHODS =====
+
+    /**
+     * Start enhanced recording session with variable detection
+     */
+    async startRecording(automationId, options = {}) {
+        if (this.isRecording) {
+            throw new Error('Recording session already active');
+        }
+
+        console.log(`📹 Starting enhanced recording session for automation: ${automationId}`);
+        
+        this.isRecording = true;
+        this.recordedActions = [];
+        
+        // Create new recording session
+        this.currentRecordingSession = new RecordingSession({
+            automationId: automationId,
+            sessionId: Date.now().toString(),
+            metadata: {
+                options: options,
+                userAgent: await this.page.evaluate(() => navigator.userAgent),
+                url: this.page.url(),
+                timestamp: new Date().toISOString()
+            }
+        });
+
+        // Set up page event listeners for recording
+        await this.setupRecordingListeners();
+        
+        console.log(`✅ Recording session started: ${this.currentRecordingSession.id}`);
+        return this.currentRecordingSession;
+    }
+
+    /**
+     * Stop recording and analyze variables
+     */
+    async stopRecording() {
+        if (!this.isRecording) {
+            throw new Error('No active recording session');
+        }
+
+        console.log(`⏹️ Stopping recording session: ${this.currentRecordingSession.id}`);
+        
+        this.isRecording = false;
+        
+        // Remove event listeners
+        await this.removeRecordingListeners();
+        
+        // Analyze recorded actions for variables
+        const detectedVariables = await this.analyzeRecordedVariables();
+        
+        // Complete the recording session
+        this.currentRecordingSession.complete();
+        this.currentRecordingSession.detectedVariables = detectedVariables;
+        
+        const result = {
+            session: this.currentRecordingSession,
+            actions: this.recordedActions,
+            variables: detectedVariables,
+            actionCount: this.recordedActions.length,
+            variableCount: detectedVariables.length
+        };
+        
+        console.log(`✅ Recording completed: ${result.actionCount} actions, ${result.variableCount} variables detected`);
+        
+        // Reset recording state
+        this.currentRecordingSession = null;
+        this.recordedActions = [];
+        
+        return result;
+    }
+
+    /**
+     * Set up event listeners for recording browser interactions
+     */
+    async setupRecordingListeners() {
+        if (!this.page) return;
+
+        try {
+            // Inject recording script into the page
+            await this.page.evaluateOnNewDocument(() => {
+                // Store original methods
+                window._originalAddEventListener = EventTarget.prototype.addEventListener;
+                window._recordedEvents = [];
+                
+                // Override addEventListener to capture events
+                EventTarget.prototype.addEventListener = function(type, listener, options) {
+                    // Call original method
+                    window._originalAddEventListener.call(this, type, listener, options);
+                    
+                    // Add our recording listener for relevant events
+                    if (['click', 'input', 'change', 'submit', 'focus', 'blur'].includes(type)) {
+                        window._originalAddEventListener.call(this, type, (event) => {
+                            window._recordedEvents.push({
+                                type: event.type,
+                                target: {
+                                    tagName: event.target.tagName,
+                                    type: event.target.type,
+                                    name: event.target.name,
+                                    id: event.target.id,
+                                    className: event.target.className,
+                                    value: event.target.value,
+                                    placeholder: event.target.placeholder,
+                                    label: event.target.labels?.[0]?.textContent || '',
+                                    ariaLabel: event.target.ariaLabel || ''
+                                },
+                                timestamp: Date.now(),
+                                url: window.location.href
+                            });
+                        }, { passive: true });
+                    }
+                };
+            });
+
+            // Set up periodic collection of recorded events
+            this.recordingInterval = setInterval(async () => {
+                if (this.isRecording) {
+                    await this.collectRecordedEvents();
+                }
+            }, 1000);
+
+        } catch (error) {
+            console.error('❌ Error setting up recording listeners:', error.message);
+        }
+    }
+
+    /**
+     * Remove recording event listeners
+     */
+    async removeRecordingListeners() {
+        if (this.recordingInterval) {
+            clearInterval(this.recordingInterval);
+            this.recordingInterval = null;
+        }
+
+        try {
+            // Restore original addEventListener
+            await this.page.evaluate(() => {
+                if (window._originalAddEventListener) {
+                    EventTarget.prototype.addEventListener = window._originalAddEventListener;
+                    delete window._originalAddEventListener;
+                    delete window._recordedEvents;
+                }
+            });
+        } catch (error) {
+            console.error('❌ Error removing recording listeners:', error.message);
+        }
+    }
+
+    /**
+     * Collect recorded events from the page
+     */
+    async collectRecordedEvents() {
+        try {
+            const events = await this.page.evaluate(() => {
+                const events = window._recordedEvents || [];
+                window._recordedEvents = []; // Clear collected events
+                return events;
+            });
+
+            // Process and store events as actions
+            for (const event of events) {
+                const action = await this.processRecordedEvent(event);
+                if (action) {
+                    this.recordedActions.push(action);
+                    this.currentRecordingSession.addAction(action);
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error collecting recorded events:', error.message);
+        }
+    }
+
+    /**
+     * Process a recorded event into an action
+     */
+    async processRecordedEvent(event) {
+        try {
+            const action = {
+                id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                type: this.mapEventTypeToAction(event.type),
+                element: event.target,
+                value: event.target.value || '',
+                timestamp: event.timestamp,
+                url: event.url,
+                screenshot: null // Could add screenshot capture here
+            };
+
+            // Take screenshot for important actions
+            if (['click', 'submit'].includes(action.type)) {
+                try {
+                    action.screenshot = await this.takeScreenshot();
+                } catch (error) {
+                    console.warn('⚠️ Could not capture screenshot for action');
+                }
+            }
+
+            console.log(`📝 Recorded action: ${action.type} on ${action.element.tagName}`);
+            return action;
+        } catch (error) {
+            console.error('❌ Error processing recorded event:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Map DOM event types to action types
+     */
+    mapEventTypeToAction(eventType) {
+        const mapping = {
+            'click': 'click',
+            'input': 'type',
+            'change': 'change',
+            'submit': 'submit',
+            'focus': 'focus',
+            'blur': 'blur'
+        };
+        
+        return mapping[eventType] || 'unknown';
+    }
+
+    /**
+     * Analyze recorded actions to detect variables
+     */
+    async analyzeRecordedVariables() {
+        if (!this.variableAnalyzer || this.recordedActions.length === 0) {
+            return [];
+        }
+
+        console.log(`🔍 Analyzing ${this.recordedActions.length} recorded actions for variables...`);
+        
+        try {
+            // Use the variable analyzer to detect patterns
+            const variableCandidates = await this.variableAnalyzer.analyzeRecording(this.recordedActions);
+            
+            // Enhance with element context analysis
+            const enhancedVariables = [];
+            for (const candidate of variableCandidates) {
+                const contextAnalysis = this.elementContextAnalyzer.analyzeElementContext(
+                    candidate.element, 
+                    candidate.value
+                );
+                
+                // Generate validation rules
+                const validationRules = this.validationRuleGenerator.generateValidationRules(
+                    candidate.type,
+                    candidate.value,
+                    contextAnalysis.context
+                );
+                
+                // Create enhanced variable
+                const enhancedVariable = new Variable({
+                    id: candidate.id,
+                    name: contextAnalysis.recommendedName || candidate.name,
+                    type: candidate.type,
+                    value: candidate.value,
+                    description: candidate.description || contextAnalysis.semantics.purpose,
+                    examples: candidate.examples,
+                    validation: validationRules,
+                    sensitive: candidate.sensitive,
+                    confidenceScore: candidate.confidence,
+                    elementInfo: {
+                        ...candidate.element,
+                        context: contextAnalysis.context,
+                        relationships: contextAnalysis.relationships
+                    }
+                });
+                
+                enhancedVariables.push(enhancedVariable);
+            }
+            
+            console.log(`✅ Enhanced ${enhancedVariables.length} variables with context analysis`);
+            return enhancedVariables;
+            
+        } catch (error) {
+            console.error('❌ Error analyzing recorded variables:', error.message);
+            return [];
+        }
+    }
+
+    /**
+     * Get current recording status
+     */
+    getRecordingStatus() {
+        return {
+            isRecording: this.isRecording,
+            sessionId: this.currentRecordingSession?.id || null,
+            actionCount: this.recordedActions.length,
+            startTime: this.currentRecordingSession?.startedAt || null,
+            duration: this.currentRecordingSession ? 
+                Date.now() - new Date(this.currentRecordingSession.startedAt).getTime() : 0
+        };
+    }
+
+    /**
+     * Process variable string with substitution and validation
+     */
+    processVariableString(text) {
+        if (!text || typeof text !== 'string') return text;
+        
+        // Replace variable placeholders with actual values
+        return text.replace(/\{\{(\w+)\}\}/g, (match, variableName) => {
+            const value = this.variables.get(variableName);
+            if (value !== undefined) {
+                // Log variable usage for analytics
+                this.trackVariableUsage(variableName, value);
+                return value;
+            }
+            
+            console.warn(`⚠️ Variable not found: ${variableName}`);
+            return match; // Return placeholder if variable not found
+        });
+    }
+
+    /**
+     * Set variable value with validation
+     */
+    async setVariable(name, value, variableDefinition = null) {
+        try {
+            // Validate variable value if definition is provided
+            if (variableDefinition && this.variableValidationService) {
+                const validation = await this.variableValidationService.validateValue(variableDefinition, value);
+                if (!validation.valid) {
+                    throw new Error(`Variable validation failed for ${name}: ${validation.errors[0]?.message}`);
+                }
+                
+                if (validation.warnings.length > 0) {
+                    console.warn(`⚠️ Variable warnings for ${name}:`, validation.warnings);
+                }
+            }
+            
+            this.variables.set(name, value);
+            console.log(`📝 Variable set: ${name} = ${variableDefinition?.sensitive ? '***' : value}`);
+            
+            return { success: true, warnings: variableDefinition ? [] : [] };
+        } catch (error) {
+            console.error(`❌ Error setting variable ${name}:`, error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Set multiple variables with batch validation
+     */
+    async setVariables(variableMap, variableDefinitions = {}) {
+        const results = [];
+        const errors = [];
+        
+        for (const [name, value] of Object.entries(variableMap)) {
+            try {
+                const definition = variableDefinitions[name];
+                const result = await this.setVariable(name, value, definition);
+                results.push({ name, success: true, ...result });
+            } catch (error) {
+                errors.push({ name, error: error.message });
+                results.push({ name, success: false, error: error.message });
+            }
+        }
+        
+        if (errors.length > 0) {
+            console.warn(`⚠️ ${errors.length} variable(s) failed validation:`, errors);
+        }
+        
+        return {
+            success: errors.length === 0,
+            results,
+            errors,
+            totalSet: results.filter(r => r.success).length,
+            totalFailed: errors.length
+        };
+    }
+
+    /**
+     * Get variable value
+     */
+    getVariable(name) {
+        return this.variables.get(name);
+    }
+
+    /**
+     * Get all variables
+     */
+    getAllVariables() {
+        return Object.fromEntries(this.variables);
+    }
+
+    /**
+     * Clear all variables
+     */
+    clearVariables() {
+        this.variables.clear();
+        console.log('🧹 All variables cleared');
+    }
+
+    /**
+     * Execute automation with variable substitution
+     */
+    async executeWithVariables(actions, variables = {}, variableDefinitions = {}) {
+        try {
+            console.log(`🎯 Executing automation with ${Object.keys(variables).length} variables`);
+            
+            // Set all variables first
+            const variableResult = await this.setVariables(variables, variableDefinitions);
+            if (!variableResult.success) {
+                throw new Error(`Variable validation failed: ${variableResult.errors.map(e => e.error).join(', ')}`);
+            }
+            
+            const results = [];
+            let executionId = Date.now().toString();
+            
+            // Execute each action with variable substitution
+            for (let i = 0; i < actions.length; i++) {
+                const action = actions[i];
+                const startTime = Date.now();
+                
+                try {
+                    console.log(`🔄 Executing step ${i + 1}/${actions.length}: ${action.type}`);
+                    
+                    const result = await this.executeActionWithVariables(action);
+                    const duration = Date.now() - startTime;
+                    
+                    results.push({
+                        stepIndex: i,
+                        action: action,
+                        success: true,
+                        result: result,
+                        duration: duration
+                    });
+                    
+                    // Track variable usage if action used variables
+                    if (action.variableId && this.variableStore) {
+                        await this.variableStore.trackVariableUsage(
+                            action.variableId, 
+                            executionId, 
+                            true, 
+                            duration
+                        );
+                    }
+                    
+                    console.log(`✅ Step ${i + 1} completed in ${duration}ms`);
+                    
+                } catch (error) {
+                    const duration = Date.now() - startTime;
+                    
+                    results.push({
+                        stepIndex: i,
+                        action: action,
+                        success: false,
+                        error: error.message,
+                        duration: duration
+                    });
+                    
+                    // Track variable usage failure
+                    if (action.variableId && this.variableStore) {
+                        await this.variableStore.trackVariableUsage(
+                            action.variableId, 
+                            executionId, 
+                            false, 
+                            duration,
+                            error.message
+                        );
+                    }
+                    
+                    console.error(`❌ Step ${i + 1} failed:`, error.message);
+                    
+                    // Decide whether to continue or stop
+                    if (action.stopOnError !== false) {
+                        throw error;
+                    }
+                }
+            }
+            
+            const totalDuration = results.reduce((sum, r) => sum + r.duration, 0);
+            const successCount = results.filter(r => r.success).length;
+            
+            console.log(`✅ Automation completed: ${successCount}/${results.length} steps successful in ${totalDuration}ms`);
+            
+            return {
+                success: successCount === results.length,
+                executionId,
+                results,
+                summary: {
+                    totalSteps: results.length,
+                    successfulSteps: successCount,
+                    failedSteps: results.length - successCount,
+                    totalDuration,
+                    variablesUsed: Object.keys(variables).length
+                }
+            };
+            
+        } catch (error) {
+            console.error('❌ Automation execution failed:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Execute individual action with variable substitution
+     */
+    async executeActionWithVariables(action) {
+        const processedAction = this.processActionVariables(action);
+        
+        switch (processedAction.type) {
+            case 'navigate':
+                await this.page.goto(processedAction.url, { 
+                    waitUntil: 'domcontentloaded', 
+                    timeout: 15000 
+                });
+                return { type: 'navigate', url: processedAction.url };
+                
+            case 'click':
+                if (this.robustInteraction) {
+                    return await this.robustClick(processedAction.selector);
+                } else {
+                    await this.page.act(processedAction.instruction || `Click ${processedAction.selector}`);
+                    return { type: 'click', selector: processedAction.selector };
+                }
+                
+            case 'type':
+                if (this.robustInteraction) {
+                    return await this.robustType(processedAction.selector, processedAction.text);
+                } else {
+                    const instruction = `Type "${processedAction.text}" in ${processedAction.selector}`;
+                    await this.page.act(instruction);
+                    return { type: 'type', selector: processedAction.selector, text: processedAction.text };
+                }
+                
+            case 'select':
+                if (this.robustInteraction) {
+                    return await this.robustSelect(processedAction.selector, processedAction.value);
+                } else {
+                    const instruction = `Select "${processedAction.value}" from ${processedAction.selector}`;
+                    await this.page.act(instruction);
+                    return { type: 'select', selector: processedAction.selector, value: processedAction.value };
+                }
+                
+            case 'wait':
+                const waitTime = processedAction.duration || 2000;
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+                return { type: 'wait', duration: waitTime };
+                
+            default:
+                // Use Stagehand's general action processing
+                const instruction = processedAction.instruction || processedAction.description;
+                await this.page.act(instruction);
+                return { type: 'action', instruction };
+        }
+    }
+
+    /**
+     * Process action to substitute variables
+     */
+    processActionVariables(action) {
+        const processed = { ...action };
+        
+        // Process all string fields for variable substitution
+        const stringFields = ['url', 'text', 'value', 'selector', 'instruction', 'description'];
+        
+        stringFields.forEach(field => {
+            if (processed[field] && typeof processed[field] === 'string') {
+                processed[field] = this.processVariableString(processed[field]);
+            }
+        });
+        
+        return processed;
+    }
+
+    /**
+     * Track variable usage for analytics
+     */
+    trackVariableUsage(variableName, value) {
+        // This would integrate with the VariableStore analytics
+        if (this.variableStore) {
+            // Track usage asynchronously to not block execution
+            setImmediate(async () => {
+                try {
+                    // This would be implemented when we have the variable ID mapping
+                    console.log(`📊 Tracking usage of variable: ${variableName}`);
+                } catch (error) {
+                    console.error('Error tracking variable usage:', error);
+                }
+            });
+        }
+    }
+
+    /**
+     * Initialize variable store integration
+     */
+    setVariableStore(variableStore) {
+        this.variableStore = variableStore;
+        console.log('🔗 Variable store integration enabled');
+    }
+
+    /**
+     * Initialize variable validation service
+     */
+    setVariableValidationService(validationService) {
+        this.variableValidationService = validationService;
+        console.log('🔍 Variable validation service enabled');
     }
 }
 

@@ -364,7 +364,7 @@ class BrowserProfileManager {
         
         process.on('SIGINT', cleanup);
         process.on('SIGTERM', cleanup);
-        process.on('uncaughtException', cleanup);
+        // Removed uncaughtException handler to prevent premature exit
     }
 
     /**

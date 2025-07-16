@@ -570,6 +570,8 @@ const App: React.FC = () => {
       isRecording={isRecording}
       onSendMessage={handleSendMessage}
       onToggleRecording={handleToggleRecording}
+      websocket={ws}
+      selectedAutomationId={selectedAutomation?.id}
       />
 
       {/* Variable Editor Modal */}

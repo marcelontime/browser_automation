@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
-import Button from '../ui/Button';
+import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
+import AnalyticsDashboard from '../automation/AnalyticsDashboard';
 
 const PanelContainer = styled.aside`
   width: 450px;
@@ -46,6 +47,37 @@ const AssistantSubtitle = styled.p`
   font-size: var(--text-sm);
   opacity: 0.9;
   margin: 0;
+`;
+
+const TabsContainer = styled.div`
+  display: flex;
+  border-bottom: 1px solid var(--neutral-200);
+  background: white;
+`;
+
+const Tab = styled.button<{ active: boolean }>`
+  flex: 1;
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  background: ${props => props.active ? 'var(--primary-50)' : 'transparent'};
+  color: ${props => props.active ? 'var(--primary-600)' : 'var(--neutral-600)'};
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border-bottom: 2px solid ${props => props.active ? 'var(--primary-500)' : 'transparent'};
+  
+  &:hover {
+    background: ${props => props.active ? 'var(--primary-50)' : 'var(--neutral-50)'};
+    color: ${props => props.active ? 'var(--primary-600)' : 'var(--neutral-700)'};
+  }
+`;
+
+const TabContent = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 `;
 
 const RecordingSection = styled.div`
@@ -238,6 +270,8 @@ interface RightPanelProps {
   isOpen?: boolean;
   automationCount?: number;
   hasVariables?: boolean;
+  websocket?: WebSocket | null;
+  selectedAutomationId?: string;
 }
 
 const RightPanel: React.FC<RightPanelProps> = ({
@@ -247,9 +281,12 @@ const RightPanel: React.FC<RightPanelProps> = ({
   onToggleRecording,
   isOpen = false,
   automationCount = 0,
-  hasVariables = false
+  hasVariables = false,
+  websocket = null,
+  selectedAutomationId
 }) => {
   const [currentMessage, setCurrentMessage] = React.useState('');
+  const [activeTab, setActiveTab] = useState<'chat' | 'analytics'>('chat');
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
 
@@ -330,71 +367,99 @@ const RightPanel: React.FC<RightPanelProps> = ({
         </AssistantSubtitle>
       </AssistantHeader>
 
-      <RecordingSection>
-        <RecordingIndicator isRecording={isRecording}>
-          <RecordingDot isRecording={isRecording} />
-          {isRecording ? 'Recording actions...' : 'Ready to record'}
-        </RecordingIndicator>
-        <Button
-          variant={isRecording ? "error" : "primary"}
-          size="sm"
-          onClick={onToggleRecording}
-          style={{ marginTop: 'var(--space-3)', width: '100%' }}
+      <TabsContainer>
+        <Tab 
+          active={activeTab === 'chat'} 
+          onClick={() => setActiveTab('chat')}
         >
-          {isRecording ? '⏹️ Stop Recording' : '🔴 Start Recording'}
-        </Button>
-      </RecordingSection>
+          💬 Chat
+        </Tab>
+        <Tab 
+          active={activeTab === 'analytics'} 
+          onClick={() => setActiveTab('analytics')}
+        >
+          📊 Analytics
+        </Tab>
+      </TabsContainer>
 
-      <ChatContainer>
-        <ChatMessages>
-          {messages.map((message) => (
-            <Message key={message.id} type={message.type}>
-              {message.text}
-            </Message>
-          ))}
-          <div ref={messagesEndRef} />
-        </ChatMessages>
+      <TabContent>
+        {activeTab === 'chat' ? (
+          <>
+            <RecordingSection>
+              <RecordingIndicator isRecording={isRecording}>
+                <RecordingDot isRecording={isRecording} />
+                {isRecording ? 'Recording actions...' : 'Ready to record'}
+              </RecordingIndicator>
+              <Button
+                variant={isRecording ? "error" : "primary"}
+                size="sm"
+                onClick={onToggleRecording}
+                style={{ marginTop: 'var(--space-3)', width: '100%' }}
+              >
+                {isRecording ? '⏹️ Stop Recording' : '🔴 Start Recording'}
+              </Button>
+            </RecordingSection>
 
-        <ChatInputContainer>
-          <ChatInputWrapper>
-            <ChatInput
-              ref={inputRef}
-              value={currentMessage}
-              onChange={(e) => setCurrentMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type your instruction..."
-              rows={1}
+            <ChatContainer>
+              <ChatMessages>
+                {messages.map((message) => (
+                  <Message key={message.id} type={message.type}>
+                    {message.text}
+                  </Message>
+                ))}
+                <div ref={messagesEndRef} />
+              </ChatMessages>
+
+              <ChatInputContainer>
+                <ChatInputWrapper>
+                  <ChatInput
+                    ref={inputRef}
+                    value={currentMessage}
+                    onChange={(e) => setCurrentMessage(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Type your instruction..."
+                    rows={1}
+                  />
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSendMessage}
+                    disabled={!currentMessage.trim()}
+                  >
+                    Send
+                  </Button>
+                </ChatInputWrapper>
+              </ChatInputContainer>
+            </ChatContainer>
+
+            <ExamplesSection>
+              <div style={{ 
+                fontSize: 'var(--text-xs)', 
+                fontWeight: 'var(--font-medium)', 
+                color: 'var(--neutral-600)',
+                marginBottom: 'var(--space-2)'
+              }}>
+                💡 Try these examples:
+              </div>
+              {examples.map((example, index) => (
+                <ExampleButton
+                  key={index}
+                  onClick={() => handleExampleClick(example)}
+                >
+                  {example}
+                </ExampleButton>
+              ))}
+            </ExamplesSection>
+          </>
+        ) : (
+          <div style={{ padding: 'var(--space-4)', height: '100%', overflow: 'auto' }}>
+            <AnalyticsDashboard 
+              websocket={websocket} 
+              automationId={selectedAutomationId}
             />
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleSendMessage}
-              disabled={!currentMessage.trim()}
-            >
-              Send
-            </Button>
-          </ChatInputWrapper>
-        </ChatInputContainer>
-      </ChatContainer>
-
-      <ExamplesSection>
-        <div style={{ 
-          fontSize: 'var(--text-xs)', 
-          fontWeight: 'var(--font-medium)', 
-          color: 'var(--neutral-600)',
-          marginBottom: 'var(--space-2)'
-        }}>
-          💡 Try these examples:
-        </div>
-        {examples.map((example, index) => (
-          <ExampleButton
-            key={index}
-            onClick={() => handleExampleClick(example)}
-          >
-            {example}
-          </ExampleButton>
-        ))}
-      </ExamplesSection>
+          </div>
+        )}
+      </TabContent>
     </PanelContainer>
   );
 };

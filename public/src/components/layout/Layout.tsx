@@ -137,6 +137,8 @@ interface LayoutProps {
   messages: Message[];
   onSendMessage: (message: string) => void;
   onToggleRecording: () => void;
+  websocket?: WebSocket | null;
+  selectedAutomationId?: string;
 }
 
 const Layout: React.FC<LayoutProps> = ({
@@ -171,7 +173,9 @@ const Layout: React.FC<LayoutProps> = ({
   // Right Panel props
   messages,
   onSendMessage,
-  onToggleRecording
+  onToggleRecording,
+  websocket,
+  selectedAutomationId
 }) => {
   const [isLeftPanelOpen, setIsLeftPanelOpen] = React.useState(false);
   const [isRightPanelOpen, setIsRightPanelOpen] = React.useState(false);
@@ -234,6 +238,8 @@ const Layout: React.FC<LayoutProps> = ({
             isOpen={isRightPanelOpen}
             automationCount={automations.length}
             hasVariables={automations.some(a => a.variableCount && a.variableCount > 0)}
+            websocket={websocket}
+            selectedAutomationId={selectedAutomationId}
           />
         </MainContent>
         

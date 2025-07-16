@@ -7,6 +7,8 @@ const jwt = require('jsonwebtoken');
 const fs = require('fs').promises;
 const StagehandAutomationEngine = require('./stagehand-engine');
 const BrowserProfileManager = require('./modules/browser/profile-manager');
+const RedisStorageManager = require('./modules/storage/redis-storage');
+const { Variable, VariableUsage, RecordingSession, EnhancedAutomation, VariableTypes } = require('./modules/storage/models');
 
 class StagehandBrowserAutomationServer {
     constructor() {
@@ -25,21 +27,31 @@ class StagehandBrowserAutomationServer {
         this.savedAutomations = new Map();
         this.automationsDir = path.join(__dirname, 'automations');
         
+        // Redis storage manager
+        this.storageManager = new RedisStorageManager({
+            fallbackToMemory: true,
+            keyPrefix: 'browser_automation:'
+        });
+        
         // Browser profile management
         this.profileManager = new BrowserProfileManager();
         
         this.setupExpress();
         this.setupWebSocket();
         this.initializeStorage();
+        this.initializeVariableServices();
         this.setupProfileCleanup();
     }
 
     async initializeStorage() {
         try {
-            // Create automations directory if it doesn't exist
+            // Initialize Redis storage
+            await this.storageManager.connect();
+            
+            // Create automations directory if it doesn't exist (for fallback)
             await fs.mkdir(this.automationsDir, { recursive: true });
             
-            // Load existing automations
+            // Load existing automations from Redis or file system
             await this.loadSavedAutomations();
             
             console.log(`📁 Automation storage initialized: ${this.savedAutomations.size} automations loaded`);
@@ -83,21 +95,39 @@ class StagehandBrowserAutomationServer {
 
     async loadSavedAutomations() {
         try {
-            const files = await fs.readdir(this.automationsDir);
-            const jsonFiles = files.filter(file => file.endsWith('.json'));
+            // Try to load from Redis first
+            const automations = await this.storageManager.getAllAutomations();
             
-            for (const file of jsonFiles) {
-                try {
-                    const filePath = path.join(this.automationsDir, file);
-                    const content = await fs.readFile(filePath, 'utf8');
-                    const automation = JSON.parse(content);
+            if (automations.length > 0) {
+                console.log(`📦 Loading ${automations.length} automations from Redis`);
+                for (const automation of automations) {
                     this.savedAutomations.set(automation.id, automation);
-                } catch (error) {
-                    console.error(`❌ Error loading automation ${file}:`, error.message);
+                }
+            } else {
+                // Fallback to file system and migrate to Redis
+                console.log('📁 No automations in Redis, checking file system...');
+                const files = await fs.readdir(this.automationsDir);
+                const jsonFiles = files.filter(file => file.endsWith('.json'));
+                
+                for (const file of jsonFiles) {
+                    try {
+                        const filePath = path.join(this.automationsDir, file);
+                        const content = await fs.readFile(filePath, 'utf8');
+                        const automation = JSON.parse(content);
+                        
+                        // Add to memory
+                        this.savedAutomations.set(automation.id, automation);
+                        
+                        // Migrate to Redis
+                        await this.storageManager.saveAutomation(automation);
+                        console.log(`🔄 Migrated automation to Redis: ${automation.name}`);
+                    } catch (error) {
+                        console.error(`❌ Error loading automation ${file}:`, error.message);
+                    }
                 }
             }
         } catch (error) {
-            console.error('❌ Error reading automations directory:', error.message);
+            console.error('❌ Error loading automations:', error.message);
         }
     }
 
@@ -106,7 +136,10 @@ class StagehandBrowserAutomationServer {
             // Save to memory
             this.savedAutomations.set(automation.id, automation);
             
-            // Save to file system
+            // Save to Redis
+            await this.storageManager.saveAutomation(automation);
+            
+            // Save to file system (fallback)
             const filePath = path.join(this.automationsDir, `${automation.id}.json`);
             await fs.writeFile(filePath, JSON.stringify(automation, null, 2));
             
@@ -130,6 +163,9 @@ class StagehandBrowserAutomationServer {
             if (!deleted) {
                 throw new Error(`Automation ${automationId} not found in memory`);
             }
+            
+            // Remove from Redis
+            await this.storageManager.deleteAutomation(automationId);
             
             // Remove from file system
             const filePath = path.join(this.automationsDir, `${automationId}.json`);
@@ -559,8 +595,84 @@ class StagehandBrowserAutomationServer {
                 await this.handleUpdateAutomationVariables(userSession, message);
                 break;
             
+            // Enhanced variable management
+            case 'create_variable':
+                await this.handleCreateVariable(userSession, message);
+                break;
+            
+            case 'update_variable':
+                await this.handleUpdateVariable(userSession, message);
+                break;
+            
+            case 'delete_variable':
+                await this.handleDeleteVariable(userSession, message);
+                break;
+            
+            case 'validate_variable':
+                await this.handleValidateVariable(userSession, message);
+                break;
+            
+            case 'validate_variables_batch':
+                await this.handleValidateVariablesBatch(userSession, message);
+                break;
+            
+            case 'get_variable_templates':
+                await this.handleGetVariableTemplates(userSession);
+                break;
+            
+            case 'create_variable_from_template':
+                await this.handleCreateVariableFromTemplate(userSession, message);
+                break;
+            
+            case 'search_variables':
+                await this.handleSearchVariables(userSession, message);
+                break;
+            
+            case 'get_variable_stats':
+                await this.handleGetVariableStats(userSession, message);
+                break;
+            
+            // Variable execution and testing
+            case 'test_variable_value':
+                await this.handleTestVariableValue(userSession, message);
+                break;
+            
+            case 'execute_with_variables':
+                await this.handleExecuteWithVariables(userSession, message);
+                break;
+            
+            // Sharing functionality
+            case 'generate_share_package':
+                await this.handleGenerateSharePackage(userSession, message);
+                break;
+            
+            case 'import_automation_package':
+                await this.handleImportAutomationPackage(userSession, message);
+                break;
+            
+            case 'validate_import_package':
+                await this.handleValidateImportPackage(userSession, message);
+                break;
+            
             case 'get_automations':
                 await this.handleGetAutomations(userSession);
+                break;
+            
+            // Variable Analytics
+            case 'get_variable_analytics':
+                await this.handleGetVariableAnalytics(userSession, message);
+                break;
+            
+            case 'get_dashboard_analytics':
+                await this.handleGetDashboardAnalytics(userSession, message);
+                break;
+            
+            case 'get_usage_patterns':
+                await this.handleGetUsagePatterns(userSession, message);
+                break;
+            
+            case 'track_variable_usage':
+                await this.handleTrackVariableUsage(userSession, message);
                 break;
             
             default:
@@ -1113,13 +1225,830 @@ class StagehandBrowserAutomationServer {
     start() {
         const PORT = process.env.PORT || 7079;
         
+        console.log('🚀 Starting server...');
+        
         this.server.listen(PORT, () => {
             console.log(`🚀 Stagehand Browser Automation Server running on port ${PORT}`);
             console.log(`📱 Web interface: http://localhost:${PORT}`);
             console.log(`🔗 WebSocket endpoint: ws://localhost:${PORT}`);
         });
+        
+        this.server.on('error', (error) => {
+            console.error('❌ Server error:', error);
+        });
+        
+        console.log('✅ Server setup complete');
     }
-}
+    // ===== VARIABLE ANALYTICS HANDLERS =====
+
+    /**
+     * Get variable analytics for a specific variable
+     */
+    async handleGetVariableAnalytics(userSession, message) {
+        try {
+            const { variableId, timeRange = '24h' } = message;
+            
+            if (!this.variableAnalyticsService) {
+                throw new Error('Variable analytics service not available');
+            }
+
+            const analytics = await this.variableAnalyticsService.getVariableStats(variableId, timeRange);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'variable_analytics',
+                data: {
+                    variableId,
+                    timeRange,
+                    analytics
+                }
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error getting variable analytics for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Error getting variable analytics: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Get dashboard analytics
+     */
+    async handleGetDashboardAnalytics(userSession, message) {
+        try {
+            const { timeRange = '24h' } = message;
+            
+            if (!this.variableAnalyticsService) {
+                throw new Error('Variable analytics service not available');
+            }
+
+            const dashboard = await this.variableAnalyticsService.getDashboardAnalytics(timeRange);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'dashboard_analytics',
+                data: {
+                    timeRange,
+                    dashboard
+                }
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error getting dashboard analytics for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Error getting dashboard analytics: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Get usage patterns for an automation
+     */
+    async handleGetUsagePatterns(userSession, message) {
+        try {
+            const { automationId } = message;
+            
+            if (!this.variableAnalyticsService) {
+                throw new Error('Variable analytics service not available');
+            }
+
+            const patterns = await this.variableAnalyticsService.getUsagePatterns(automationId);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'usage_patterns',
+                data: {
+                    automationId,
+                    patterns
+                }
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error getting usage patterns for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Error getting usage patterns: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Track variable usage event
+     */
+    async handleTrackVariableUsage(userSession, message) {
+        try {
+            const { variableId, executionId, eventData } = message;
+            
+            if (!this.variableAnalyticsService) {
+                throw new Error('Variable analytics service not available');
+            }
+
+            const event = await this.variableAnalyticsService.trackVariableUsage(
+                variableId, 
+                executionId, 
+                eventData
+            );
+            
+            this.sendToClient(userSession.ws, {
+                type: 'variable_usage_tracked',
+                data: {
+                    variableId,
+                    executionId,
+                    event
+                }
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error tracking variable usage for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Error tracking variable usage: ${error.message}`
+            });
+        }
+    }
+
+    // ===== VARIABLE ANALYTICS HANDLERS =====
+
+    /**
+     * Get variable analytics for a specific variable
+     */
+    async handleGetVariableAnalytics(userSession, message) {
+        try {
+            const { variableId, timeRange = '24h' } = message;
+            
+            if (!this.variableAnalyticsService) {
+                throw new Error('Variable analytics service not available');
+            }
+
+            const analytics = await this.variableAnalyticsService.getVariableStats(variableId, timeRange);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'variable_analytics',
+                data: {
+                    variableId,
+                    timeRange,
+                    analytics
+                }
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error getting variable analytics for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Error getting variable analytics: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Get dashboard analytics
+     */
+    async handleGetDashboardAnalytics(userSession, message) {
+        try {
+            const { timeRange = '24h' } = message;
+            
+            if (!this.variableAnalyticsService) {
+                throw new Error('Variable analytics service not available');
+            }
+
+            const dashboard = await this.variableAnalyticsService.getDashboardAnalytics(timeRange);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'dashboard_analytics',
+                data: {
+                    timeRange,
+                    dashboard
+                }
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error getting dashboard analytics for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Error getting dashboard analytics: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Get usage patterns for an automation
+     */
+    async handleGetUsagePatterns(userSession, message) {
+        try {
+            const { automationId } = message;
+            
+            if (!this.variableAnalyticsService) {
+                throw new Error('Variable analytics service not available');
+            }
+
+            const patterns = await this.variableAnalyticsService.getUsagePatterns(automationId);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'usage_patterns',
+                data: {
+                    automationId,
+                    patterns
+                }
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error getting usage patterns for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Error getting usage patterns: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Track variable usage event
+     */
+    async handleTrackVariableUsage(userSession, message) {
+        try {
+            const { variableId, executionId, eventData } = message;
+            
+            if (!this.variableAnalyticsService) {
+                throw new Error('Variable analytics service not available');
+            }
+
+            const event = await this.variableAnalyticsService.trackVariableUsage(
+                variableId, 
+                executionId, 
+                eventData
+            );
+            
+            this.sendToClient(userSession.ws, {
+                type: 'variable_usage_tracked',
+                data: {
+                    variableId,
+                    executionId,
+                    event
+                }
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error tracking variable usage for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Error tracking variable usage: ${error.message}`
+            });
+        }
+    }
+
+    // ===== ENHANCED VARIABLE MANAGEMENT HANDLERS =====
+
+    /**
+     * Handle create variable request
+     */
+    async handleCreateVariable(userSession, message) {
+        try {
+            const { automationId, variableData } = message;
+            
+            if (!this.variableStore) {
+                throw new Error('Variable store not initialized');
+            }
+            
+            console.log(`📝 [${userSession.sessionId}] Creating variable: ${variableData.name}`);
+            
+            const variable = await this.variableStore.createVariable(automationId, variableData);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'variable_created',
+                variable: variable.toJSON(),
+                message: `✅ Variable "${variable.name}" created successfully`
+            });
+            
+            // Broadcast variable change to other clients working on the same automation
+            this.broadcastVariableChange(automationId, 'created', variable);
+            
+        } catch (error) {
+            console.error(`❌ Error creating variable for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to create variable: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Handle update variable request
+     */
+    async handleUpdateVariable(userSession, message) {
+        try {
+            const { variableId, updates } = message;
+            
+            if (!this.variableStore) {
+                throw new Error('Variable store not initialized');
+            }
+            
+            console.log(`📝 [${userSession.sessionId}] Updating variable: ${variableId}`);
+            
+            const variable = await this.variableStore.updateVariable(variableId, updates);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'variable_updated',
+                variable: variable.toJSON(),
+                message: `✅ Variable "${variable.name}" updated successfully`
+            });
+            
+            // Broadcast variable change
+            this.broadcastVariableChange(variable.automationId, 'updated', variable);
+            
+        } catch (error) {
+            console.error(`❌ Error updating variable for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to update variable: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Handle delete variable request
+     */
+    async handleDeleteVariable(userSession, message) {
+        try {
+            const { variableId } = message;
+            
+            if (!this.variableStore) {
+                throw new Error('Variable store not initialized');
+            }
+            
+            // Get variable info before deletion for broadcasting
+            const variable = await this.variableStore.getVariable(variableId);
+            if (!variable) {
+                throw new Error('Variable not found');
+            }
+            
+            console.log(`🗑️ [${userSession.sessionId}] Deleting variable: ${variable.name}`);
+            
+            const success = await this.variableStore.deleteVariable(variableId);
+            
+            if (success) {
+                this.sendToClient(userSession.ws, {
+                    type: 'variable_deleted',
+                    variableId: variableId,
+                    message: `✅ Variable "${variable.name}" deleted successfully`
+                });
+                
+                // Broadcast variable deletion
+                this.broadcastVariableChange(variable.automationId, 'deleted', { id: variableId, name: variable.name });
+            } else {
+                throw new Error('Failed to delete variable');
+            }
+            
+        } catch (error) {
+            console.error(`❌ Error deleting variable for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to delete variable: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Handle validate variable request
+     */
+    async handleValidateVariable(userSession, message) {
+        try {
+            const { variableId, value } = message;
+            
+            if (!this.variableStore) {
+                throw new Error('Variable store not initialized');
+            }
+            
+            console.log(`🔍 [${userSession.sessionId}] Validating variable: ${variableId}`);
+            
+            const validation = await this.variableStore.validateVariable(variableId, value);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'variable_validation_result',
+                variableId: variableId,
+                validation: validation,
+                message: validation.valid ? '✅ Variable validation passed' : '❌ Variable validation failed'
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error validating variable for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to validate variable: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Handle batch validate variables request
+     */
+    async handleValidateVariablesBatch(userSession, message) {
+        try {
+            const { validationRequests } = message;
+            
+            if (!this.variableStore) {
+                throw new Error('Variable store not initialized');
+            }
+            
+            console.log(`🔍 [${userSession.sessionId}] Batch validating ${validationRequests.length} variables`);
+            
+            const results = await this.variableStore.validateVariables(validationRequests);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'variables_batch_validation_result',
+                results: results,
+                message: `✅ Batch validation completed: ${results.filter(r => r.valid).length}/${results.length} valid`
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error batch validating variables for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to validate variables: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Handle get variable templates request
+     */
+    async handleGetVariableTemplates(userSession) {
+        try {
+            if (!this.variableStore) {
+                throw new Error('Variable store not initialized');
+            }
+            
+            console.log(`📋 [${userSession.sessionId}] Getting variable templates`);
+            
+            const templates = this.variableStore.getTemplates();
+            
+            this.sendToClient(userSession.ws, {
+                type: 'variable_templates',
+                templates: templates,
+                message: `✅ Retrieved ${Object.keys(templates).length} variable templates`
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error getting variable templates for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to get variable templates: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Handle create variable from template request
+     */
+    async handleCreateVariableFromTemplate(userSession, message) {
+        try {
+            const { automationId, templateName, customData } = message;
+            
+            if (!this.variableStore) {
+                throw new Error('Variable store not initialized');
+            }
+            
+            console.log(`📝 [${userSession.sessionId}] Creating variable from template: ${templateName}`);
+            
+            const variable = await this.variableStore.createFromTemplate(automationId, templateName, customData);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'variable_created_from_template',
+                variable: variable.toJSON(),
+                templateName: templateName,
+                message: `✅ Variable "${variable.name}" created from template "${templateName}"`
+            });
+            
+            // Broadcast variable change
+            this.broadcastVariableChange(automationId, 'created', variable);
+            
+        } catch (error) {
+            console.error(`❌ Error creating variable from template for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to create variable from template: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Handle search variables request
+     */
+    async handleSearchVariables(userSession, message) {
+        try {
+            const { automationId, query } = message;
+            
+            if (!this.variableStore) {
+                throw new Error('Variable store not initialized');
+            }
+            
+            console.log(`🔍 [${userSession.sessionId}] Searching variables: "${query}"`);
+            
+            const variables = await this.variableStore.searchVariables(automationId, query);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'variable_search_results',
+                variables: variables.map(v => v.toJSON()),
+                query: query,
+                message: `✅ Found ${variables.length} variables matching "${query}"`
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error searching variables for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to search variables: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Handle get variable stats request
+     */
+    async handleGetVariableStats(userSession, message) {
+        try {
+            const { variableId } = message;
+            
+            if (!this.variableStore) {
+                throw new Error('Variable store not initialized');
+            }
+            
+            console.log(`📊 [${userSession.sessionId}] Getting variable stats: ${variableId}`);
+            
+            const stats = await this.variableStore.getVariableStats(variableId);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'variable_stats',
+                variableId: variableId,
+                stats: stats,
+                message: `✅ Retrieved stats for variable`
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error getting variable stats for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to get variable stats: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Handle test variable value request
+     */
+    async handleTestVariableValue(userSession, message) {
+        try {
+            const { variableId, testValue } = message;
+            
+            if (!this.variableStore || !this.variableValidationService) {
+                throw new Error('Variable services not initialized');
+            }
+            
+            console.log(`🧪 [${userSession.sessionId}] Testing variable value: ${variableId}`);
+            
+            const variable = await this.variableStore.getVariable(variableId);
+            if (!variable) {
+                throw new Error('Variable not found');
+            }
+            
+            const validation = await this.variableValidationService.validateValue(variable, testValue);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'variable_test_result',
+                variableId: variableId,
+                testValue: testValue,
+                validation: validation,
+                message: validation.valid ? '✅ Test value is valid' : '❌ Test value is invalid'
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error testing variable value for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to test variable value: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Handle execute with variables request
+     */
+    async handleExecuteWithVariables(userSession, message) {
+        try {
+            const { automationId, variables, variableDefinitions } = message;
+            
+            if (!userSession.automationEngine) {
+                throw new Error('Automation engine not initialized');
+            }
+            
+            console.log(`🎯 [${userSession.sessionId}] Executing automation with variables: ${automationId}`);
+            
+            // Get automation
+            const automation = this.savedAutomations.get(automationId);
+            if (!automation) {
+                throw new Error('Automation not found');
+            }
+            
+            // Set up variable store and validation service in the engine
+            if (this.variableStore) {
+                userSession.automationEngine.setVariableStore(this.variableStore);
+            }
+            if (this.variableValidationService) {
+                userSession.automationEngine.setVariableValidationService(this.variableValidationService);
+            }
+            
+            // Execute automation with variables
+            const result = await userSession.automationEngine.executeWithVariables(
+                automation.actions || [],
+                variables,
+                variableDefinitions
+            );
+            
+            this.sendToClient(userSession.ws, {
+                type: 'automation_execution_result',
+                automationId: automationId,
+                result: result,
+                message: result.success ? 
+                    `✅ Automation executed successfully: ${result.summary.successfulSteps}/${result.summary.totalSteps} steps` :
+                    `❌ Automation execution failed: ${result.summary.failedSteps} steps failed`
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error executing automation with variables for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to execute automation: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Handle generate share package request
+     */
+    async handleGenerateSharePackage(userSession, message) {
+        try {
+            const { automationId, options } = message;
+            
+            if (!this.shareGenerator) {
+                throw new Error('Share generator not initialized');
+            }
+            
+            console.log(`📦 [${userSession.sessionId}] Generating share package: ${automationId}`);
+            
+            const shareResult = await this.shareGenerator.generateSharePackage(automationId, options);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'share_package_generated',
+                automationId: automationId,
+                package: shareResult.package,
+                compressed: shareResult.compressed,
+                size: shareResult.size,
+                checksum: shareResult.checksum,
+                message: `✅ Share package generated (${Math.round(shareResult.size.compressed / 1024)}KB)`
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error generating share package for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to generate share package: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Handle import automation package request
+     */
+    async handleImportAutomationPackage(userSession, message) {
+        try {
+            const { packageData, options } = message;
+            
+            if (!this.importProcessor) {
+                throw new Error('Import processor not initialized');
+            }
+            
+            console.log(`📥 [${userSession.sessionId}] Importing automation package`);
+            
+            const importResult = await this.importProcessor.importAutomationPackage(packageData, options);
+            
+            // Save the imported automation
+            if (importResult.success && importResult.automation) {
+                await this.saveAutomation(importResult.automation);
+            }
+            
+            this.sendToClient(userSession.ws, {
+                type: 'automation_package_imported',
+                result: importResult,
+                message: importResult.success ? 
+                    `✅ Automation "${importResult.automation.name}" imported successfully` :
+                    `❌ Import failed`
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error importing automation package for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to import automation package: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Handle validate import package request
+     */
+    async handleValidateImportPackage(userSession, message) {
+        try {
+            const { packageData } = message;
+            
+            if (!this.importProcessor) {
+                throw new Error('Import processor not initialized');
+            }
+            
+            console.log(`🔍 [${userSession.sessionId}] Validating import package`);
+            
+            const validation = await this.importProcessor.importAutomationPackage(packageData, { validateOnly: true });
+            
+            this.sendToClient(userSession.ws, {
+                type: 'import_package_validation_result',
+                validation: validation,
+                message: validation.valid ? 
+                    `✅ Package is valid and ready for import` :
+                    `❌ Package validation failed`
+            });
+            
+        } catch (error) {
+            console.error(`❌ Error validating import package for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to validate import package: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Broadcast variable changes to other clients working on the same automation
+     */
+    broadcastVariableChange(automationId, changeType, variable) {
+        try {
+            const message = {
+                type: 'variable_change_broadcast',
+                automationId: automationId,
+                changeType: changeType,
+                variable: variable,
+                timestamp: Date.now()
+            };
+            
+            // Send to all connected clients except the one that made the change
+            for (const [sessionId, userSession] of this.userSessions) {
+                try {
+                    this.sendToClient(userSession.ws, message);
+                } catch (error) {
+                    console.error(`Error broadcasting to session ${sessionId}:`, error.message);
+                }
+            }
+            
+        } catch (error) {
+            console.error('Error broadcasting variable change:', error.message);
+        }
+    }
+
+    /**
+     * Initialize variable-related services
+     */
+    async initializeVariableServices() {
+        try {
+            // Initialize Variable Store
+            const VariableStore = require('./modules/storage/variable-store');
+            this.variableStore = new VariableStore(this.storageManager.redisClient);
+            
+            // Initialize Variable Validation Service
+            const VariableValidationService = require('./modules/storage/variable-validation-service');
+            this.variableValidationService = new VariableValidationService();
+            
+            // Initialize Variable Analytics Service
+            const VariableAnalyticsService = require('./modules/analytics/variable-analytics-service');
+            this.variableAnalyticsService = new VariableAnalyticsService(
+                this.storageManager.redisClient, 
+                this.variableStore
+            );
+            
+            // Connect analytics service to variable store
+            this.variableStore.setAnalyticsService(this.variableAnalyticsService);
+            
+            // Initialize Share Generator
+            const ShareGenerator = require('./modules/sharing/share-generator');
+            this.shareGenerator = new ShareGenerator(this.variableStore, this);
+            
+            // Initialize Import Processor
+            const ImportProcessor = require('./modules/sharing/import-processor');
+            this.importProcessor = new ImportProcessor(this.variableStore, this);
+            
+            console.log('✅ Variable services initialized successfully');
+            
+        } catch (error) {
+            console.error('❌ Error initializing variable services:', error.message);
+            // Continue without variable services - they're optional enhancements
+        }
+    }}
+
 
 // Start the server
 const server = new StagehandBrowserAutomationServer();
