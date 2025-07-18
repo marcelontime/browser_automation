@@ -46,7 +46,7 @@ node test_brazilian_insurance_automation.js --extended
 1. **Navigate** to `https://azut1-br-digital.azurewebsites.net/login`
 2. **Handle popups** if present
 3. **Fill CPF** field with `381.151.977-85`
-4. **Fill password** field with `akad@2025`
+4. **Fill password** field with `Akad@2025`
 5. **Submit login** credentials
 
 ### **Form Navigation Phase**

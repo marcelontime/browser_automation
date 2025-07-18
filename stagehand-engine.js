@@ -6,6 +6,18 @@ const VariableAnalyzer = require('./modules/analysis/variable-analyzer');
 const ElementContextAnalyzer = require('./modules/analysis/element-context-analyzer');
 const ValidationRuleGenerator = require('./modules/analysis/validation-rule-generator');
 const { RecordingSession, Variable, VariableTypes } = require('./modules/storage/models');
+const PlaywrightRecorder = require('./modules/recording/playwright-recorder');
+
+// Import workflow system components
+const WorkflowEngine = require('./modules/workflow/workflow-engine');
+const StepExecutor = require('./modules/workflow/step-executor');
+const TimingController = require('./modules/workflow/timing-controller');
+const NavigationHandler = require('./modules/workflow/handlers/navigation-handler');
+const InteractionHandler = require('./modules/workflow/handlers/interaction-handler');
+const ExtractionHandler = require('./modules/workflow/handlers/extraction-handler');
+const ValidationHandler = require('./modules/workflow/handlers/validation-handler');
+const ControlHandler = require('./modules/workflow/handlers/control-handler');
+const WorkflowParser = require('./modules/workflow/workflow-parser');
 
 class StagehandAutomationEngine {
     constructor(options = {}) {
@@ -36,6 +48,13 @@ class StagehandAutomationEngine {
         // Import error recovery module
         this.errorRecovery = null;
         this.importErrorRecovery();
+        
+        // Initialize workflow system components
+        this.workflowEngine = null;
+        this.stepExecutor = null;
+        this.timingController = null;
+        this.workflowParser = null;
+        this.activeWorkflows = new Map();
     }
 
     async importErrorRecovery() {
@@ -51,8 +70,15 @@ class StagehandAutomationEngine {
         try {
             console.log('🚀 Initializing Stagehand automation engine...');
             
-            // Use the configuration passed from the server (this.options) instead of creating a new one
-            console.log('🔑 Using API key from options:', this.options.openaiApiKey ? 'SET' : 'NOT SET');
+            // Extract API key from modelClientOptions if available
+            const apiKey = this.options.modelClientOptions?.apiKey || this.options.openaiApiKey || process.env.OPENAI_API_KEY;
+            console.log('🔑 Using API key from options:', apiKey ? 'SET' : 'NOT SET');
+            
+            // Ensure API key is properly set in the options
+            if (apiKey) {
+                this.options.modelClientOptions = this.options.modelClientOptions || {};
+                this.options.modelClientOptions.apiKey = apiKey;
+            }
             
             this.stagehand = new Stagehand(this.options);
             await this.stagehand.init();
@@ -61,7 +87,6 @@ class StagehandAutomationEngine {
             
             // Initialize robust element interaction system if available
             try {
-                const { RobustElementInteraction } = require('./modules/browser/element-interaction');
                 this.robustInteraction = new RobustElementInteraction(this.page, {
                     defaultTimeout: 30000,
                     retryAttempts: 3,
@@ -104,9 +129,20 @@ class StagehandAutomationEngine {
                 supportMultipleLanguages: true
             });
             
+            // Initialize Playwright recorder for generating scripts
+            this.playwrightRecorder = new PlaywrightRecorder({
+                skipErrors: true,
+                includeScreenshots: false,
+                generateComments: true,
+                variablePattern: '${VAR_NAME}'
+            });
+            
+            // Initialize workflow system
+            await this.initializeWorkflowSystem();
+            
             this.isInitialized = true;
             
-            console.log('✅ Stagehand engine initialized with enhanced error handling');
+            console.log('✅ Stagehand engine initialized with enhanced error handling and workflow system');
             return true;
         } catch (error) {
             console.error('❌ Failed to initialize Stagehand engine:', error.message);
@@ -198,7 +234,14 @@ class StagehandAutomationEngine {
                 return controlResult;
             }
 
-            // Use Stagehand's intelligent action processing
+            // Check if this is a multi-step instruction
+            if (this.isMultiStepInstruction(instruction)) {
+                const result = await this.executeMultiStepInstruction(instruction);
+                this.resetInstructionState();
+                return result;
+            }
+
+            // Use Stagehand's intelligent action processing for single steps
             const result = await this.executeAutomation(instruction);
             this.resetInstructionState();
             return result;
@@ -230,6 +273,173 @@ class StagehandAutomationEngine {
             this.resetInstructionState();
             throw error;
         }
+    }
+
+    // Detect multi-step instructions
+    isMultiStepInstruction(instruction) {
+        // Check for numbered steps (1., 2., 3., etc.)
+        const numberedSteps = /^\s*\d+\.\s*\*\*.*?\*\*|\d+\.\s*\*\*.*?\*\*/gm;
+        const numberedMatches = instruction.match(numberedSteps);
+        
+        // Check for markdown bold steps (**Step**)
+        const boldSteps = /\*\*[^*]+\*\*/g;
+        const boldMatches = instruction.match(boldSteps);
+        
+        // Check for multiple sentences with action words
+        const actionWords = ['navigate', 'fill', 'click', 'submit', 'enter', 'select', 'type'];
+        const sentences = instruction.split(/[.!?]+/).filter(s => s.trim().length > 0);
+        const actionSentences = sentences.filter(sentence => 
+            actionWords.some(word => sentence.toLowerCase().includes(word))
+        );
+        
+        return (numberedMatches && numberedMatches.length > 1) || 
+               (boldMatches && boldMatches.length > 1) ||
+               (actionSentences.length > 1);
+    }
+
+    // Execute multi-step instructions sequentially
+    async executeMultiStepInstruction(instruction) {
+        console.log('🔄 Detected multi-step instruction, breaking down into individual steps...');
+        
+        const steps = this.parseMultiStepInstruction(instruction);
+        console.log(`📋 Parsed ${steps.length} steps:`, steps.map((s, i) => `${i+1}. ${s}`));
+        
+        const results = [];
+        let allSuccessful = true;
+        
+        for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
+            const stepNumber = i + 1;
+            
+            console.log(`🎯 Executing step ${stepNumber}/${steps.length}: "${step}"`);
+            
+            try {
+                // Add a small delay between steps to allow page to settle
+                if (i > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+                
+                const stepResult = await this.executeAutomation(step);
+                results.push({
+                    step: stepNumber,
+                    instruction: step,
+                    result: stepResult,
+                    success: true
+                });
+                
+                console.log(`✅ Step ${stepNumber} completed successfully`);
+                
+            } catch (error) {
+                console.error(`❌ Step ${stepNumber} failed:`, error.message);
+                
+                results.push({
+                    step: stepNumber,
+                    instruction: step,
+                    error: error.message,
+                    success: false
+                });
+                
+                allSuccessful = false;
+                
+                // Decide whether to continue or stop
+                if (this.shouldStopOnStepFailure(step, error)) {
+                    console.log(`🛑 Stopping execution due to critical step failure`);
+                    break;
+                } else {
+                    console.log(`⚠️ Continuing with next step despite failure`);
+                }
+            }
+        }
+        
+        const successfulSteps = results.filter(r => r.success).length;
+        
+        return {
+            success: allSuccessful,
+            totalSteps: steps.length,
+            successfulSteps: successfulSteps,
+            failedSteps: steps.length - successfulSteps,
+            results: results,
+            action: 'multi_step_execution'
+        };
+    }
+
+    // Parse multi-step instruction into individual steps
+    parseMultiStepInstruction(instruction) {
+        const steps = [];
+        
+        // Method 1: Try numbered steps first (1., 2., 3., etc.)
+        const numberedPattern = /(\d+\.\s*\*\*[^*]+\*\*[^0-9]*?)(?=\d+\.\s*\*\*|$)/g;
+        let match;
+        
+        while ((match = numberedPattern.exec(instruction)) !== null) {
+            const step = match[1].trim();
+            if (step) {
+                // Clean up the step text
+                const cleanStep = step
+                    .replace(/^\d+\.\s*/, '') // Remove number prefix
+                    .replace(/\*\*/g, '') // Remove markdown bold
+                    .trim();
+                
+                if (cleanStep) {
+                    steps.push(cleanStep);
+                }
+            }
+        }
+        
+        // Method 2: If no numbered steps, try bold patterns
+        if (steps.length === 0) {
+            const boldPattern = /\*\*([^*]+)\*\*([^*]*?)(?=\*\*|$)/g;
+            
+            while ((match = boldPattern.exec(instruction)) !== null) {
+                const action = match[1].trim();
+                const details = match[2].trim();
+                
+                if (action) {
+                    const step = details ? `${action} ${details}` : action;
+                    steps.push(step.trim());
+                }
+            }
+        }
+        
+        // Method 3: If still no steps, split by sentences with action words
+        if (steps.length === 0) {
+            const actionWords = ['navigate', 'fill', 'click', 'submit', 'enter', 'select', 'type'];
+            const sentences = instruction.split(/[.!?]+/).filter(s => s.trim().length > 0);
+            
+            for (const sentence of sentences) {
+                if (actionWords.some(word => sentence.toLowerCase().includes(word))) {
+                    steps.push(sentence.trim());
+                }
+            }
+        }
+        
+        // Fallback: if no steps found, treat as single step
+        if (steps.length === 0) {
+            steps.push(instruction.trim());
+        }
+        
+        return steps;
+    }
+
+    // Determine if execution should stop on step failure
+    shouldStopOnStepFailure(step, error) {
+        // Stop on navigation failures (critical)
+        if (step.toLowerCase().includes('navigate') || step.toLowerCase().includes('go to')) {
+            return true;
+        }
+        
+        // Stop on login failures (critical)
+        if (step.toLowerCase().includes('login') || step.toLowerCase().includes('submit')) {
+            return true;
+        }
+        
+        // Continue on form field failures (non-critical)
+        if (step.toLowerCase().includes('fill') || step.toLowerCase().includes('type')) {
+            return false;
+        }
+        
+        // Default: stop on failure
+        return true;
     }
 
     // Reset instruction state
@@ -365,22 +575,26 @@ class StagehandAutomationEngine {
 
     // Execute individual automation step using Stagehand
     async executeAutomationStep(step) {
+        // Add safe property access
+        if (!step || typeof step !== 'string') {
+            throw new Error('Invalid step: step must be a non-empty string');
+        }
+        
         if (step.startsWith('Navigate to ')) {
             const url = step.replace('Navigate to ', '');
             await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10000 });
             console.log(`✅ Navigated to: ${url}`);
+            
+            // Record successful navigation in Playwright recorder
+            if (this.isRecording && this.playwrightRecorder) {
+                this.playwrightRecorder.recordNavigation(url);
+            }
+            
             return;
         }
 
-        // Use Stagehand's page.act() method with timeout protection
-        const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Step timeout after 20 seconds')), 20000);
-        });
-        
-        const stepPromise = this.page.act(step);
-        
-        // Race between step execution and timeout
-        await Promise.race([stepPromise, timeoutPromise]);
+        // Use robust Stagehand wrapper with comprehensive error handling
+        await this.robustPageAct(step, { timeout: 20000 });
         console.log(`✅ Step completed: ${step}`);
     }
 
@@ -393,18 +607,10 @@ class StagehandAutomationEngine {
                 return navigationResult;
             }
             
-            // Use Stagehand's page.act() for direct actions (correct API: string parameter)
+            // Use robust Stagehand wrapper with comprehensive error handling
             console.log('🎯 Executing action with Stagehand...');
             
-            // Add timeout protection to prevent hanging
-            const timeoutPromise = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error('Action timeout after 30 seconds')), 30000);
-            });
-            
-            const actionPromise = this.page.act(instruction);
-            
-            // Race between action and timeout
-            await Promise.race([actionPromise, timeoutPromise]);
+            await this.robustPageAct(instruction, { timeout: 30000 });
             
             console.log('✅ Stagehand action completed successfully');
             
@@ -419,6 +625,13 @@ class StagehandAutomationEngine {
 
         } catch (error) {
             console.error('❌ Automation execution failed:', error.message);
+            
+            // Check if this is a Stagehand method compatibility issue
+            if (error.message.includes('Method navigate not supported') || 
+                error.message.includes('PlaywrightCommandMethodNotSupportedException')) {
+                console.log('🔄 Attempting fallback for unsupported Stagehand method...');
+                return await this.handleStagehandFallback(instruction, error);
+            }
             
             // If it's a timeout, try to recover
             if (error.message.includes('timeout')) {
@@ -438,39 +651,69 @@ class StagehandAutomationEngine {
 
     // Handle navigation instructions directly to avoid Stagehand confusion
     async handleNavigationInstruction(instruction) {
-        const instructionLower = instruction.toLowerCase();
-        
-        // Check for direct navigation patterns
-        const navigationPatterns = [
-            /^(?:go to|navigate to|open|visit)\s+(.+)$/i,
-            /^(?:goto|nav)\s+(.+)$/i,
-            /^(.+\.(com|org|net|io|co|gov|edu|mil|int|eu|uk|us|ca|au|de|fr|jp|cn|in|br|mx|ru|za|ng|eg|sa|ae|il|tr|pl|nl|be|ch|se|no|dk|fi|ie|at|pt|es|it|gr))$/i
+        // Enhanced URL extraction with better cleaning
+        const urlPatterns = [
+            /(?:navigate|go)\s+to\s+(https?:\/\/[^\s]+)/i,
+            /(?:open|visit)\s+(https?:\/\/[^\s]+)/i,
+            /(https?:\/\/[^\s`'"]+)/i // Direct URL detection
         ];
-        
-        for (const pattern of navigationPatterns) {
+
+        for (const pattern of urlPatterns) {
             const match = instruction.match(pattern);
             if (match) {
-                let url = match[1].trim();
+                let url = match[1] || match[0];
                 
-                // Add protocol if missing
-                if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                // Clean the URL of any formatting artifacts
+                url = url.replace(/[`'"]/g, '').trim();
+                
+                // Ensure proper URL format
+                if (!url.startsWith('http')) {
                     url = 'https://' + url;
                 }
                 
-                console.log(`🌐 Direct navigation to: ${url}`);
-                await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+                console.log(`🌐 Direct navigation detected: "${instruction}" → "${url}"`);
                 
-                return {
-                    success: true,
-                    action: {
-                        type: 'navigate',
-                        url: url
-                    },
-                    method: 'direct_navigation'
-                };
+                try {
+                    await this.page.goto(url, { 
+                        waitUntil: 'domcontentloaded',
+                        timeout: 30000 
+                    });
+                    
+                    // Verify we actually navigated to the expected domain
+                    const currentUrl = this.page.url();
+                    const expectedDomain = new URL(url).hostname;
+                    const currentDomain = new URL(currentUrl).hostname;
+                    
+                    if (currentDomain === expectedDomain) {
+                        console.log(`✅ Navigation successful: Now on ${currentDomain}`);
+                        
+                        // Record successful navigation in Playwright recorder
+                        if (this.isRecording && this.playwrightRecorder) {
+                            this.playwrightRecorder.recordNavigation(url, currentUrl);
+                        }
+                        
+                        return {
+                            success: true,
+                            action: { type: 'navigate', url: url, currentUrl: currentUrl },
+                            method: 'direct_navigation'
+                        };
+                    } else {
+                        console.error(`❌ Navigation domain mismatch: Expected ${expectedDomain}, got ${currentDomain}`);
+                        return {
+                            success: false,
+                            error: `Navigation failed: Expected ${expectedDomain} but ended up on ${currentDomain}`
+                        };
+                    }
+                } catch (error) {
+                    console.error(`❌ Navigation failed:`, error.message);
+                    return {
+                        success: false,
+                        error: `Navigation failed: ${error.message}`
+                    };
+                }
             }
         }
-        
+
         return null; // Not a navigation instruction
     }
 
@@ -547,6 +790,178 @@ class StagehandAutomationEngine {
             console.error('❌ Error taking screenshot:', error.message);
             return null;
         }
+    }
+
+    // Handle Stagehand fallback for unsupported methods
+    async handleStagehandFallback(instruction, originalError) {
+        console.log('🔧 Implementing Stagehand fallback for:', instruction);
+        
+        try {
+            // Parse the instruction to understand what action is needed
+            const actionDetails = this.parseActionFromInstruction(instruction);
+            
+            // Handle different types of actions with direct Playwright
+            switch (actionDetails.type) {
+                case 'navigate':
+                    return await this.handleDirectNavigation(actionDetails.url || instruction);
+                    
+                case 'click':
+                    return await this.handleDirectClick(instruction);
+                    
+                case 'type':
+                    return await this.handleDirectType(instruction);
+                    
+                case 'select':
+                    return await this.handleDirectSelect(instruction);
+                    
+                default:
+                    // For complex actions, try to use AI to identify elements but execute with Playwright
+                    return await this.handleComplexActionFallback(instruction);
+            }
+            
+        } catch (fallbackError) {
+            console.error('❌ Fallback method also failed:', fallbackError.message);
+            
+            // Return the original error with additional context
+            throw new Error(`Stagehand failed: ${originalError.message}. Fallback also failed: ${fallbackError.message}`);
+        }
+    }
+    
+    async handleDirectNavigation(url) {
+        console.log('🌐 Direct navigation fallback to:', url);
+        
+        // Clean up URL if needed
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            url = 'https://' + url;
+        }
+        
+        await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+        
+        // ✅ FIXED: Record navigation in PlaywrightRecorder during direct navigation fallback
+        if (this.isRecording && this.playwrightRecorder) {
+            this.playwrightRecorder.recordNavigation(url);
+            console.log(`🎬 Recorded fallback navigation in Playwright script: ${url}`);
+        }
+        
+        return {
+            success: true,
+            action: { type: 'navigate', url: url },
+            method: 'direct_playwright_navigation'
+        };
+    }
+    
+    async handleDirectClick(instruction) {
+        console.log('🖱️ Direct click fallback for:', instruction);
+        
+        // Try common button/link selectors
+        const commonSelectors = [
+            'button:contains("search")',
+            'input[type="submit"]',
+            '[role="button"]',
+            'a:contains("search")',
+            '.search-button',
+            '#search-button',
+            '.btn-search',
+            'button[type="submit"]'
+        ];
+        
+        for (const selector of commonSelectors) {
+            try {
+                const element = await this.page.$(selector);
+                if (element) {
+                    await element.click();
+                    console.log(`✅ Clicked element with selector: ${selector}`);
+                    return {
+                        success: true,
+                        action: { type: 'click', selector: selector },
+                        method: 'direct_playwright_click'
+                    };
+                }
+            } catch (error) {
+                // Continue to next selector
+                continue;
+            }
+        }
+        
+        throw new Error('Could not find clickable element');
+    }
+    
+    async handleDirectType(instruction) {
+        console.log('⌨️ Direct type fallback for:', instruction);
+        
+        // Extract text to type from instruction
+        const textMatch = instruction.match(/(?:type|search for|enter)\s+"?([^"]+)"?/i);
+        const text = textMatch ? textMatch[1] : '';
+        
+        if (!text) {
+            throw new Error('Could not extract text to type from instruction');
+        }
+        
+        // Try common input selectors
+        const inputSelectors = [
+            'input[type="search"]',
+            'input[name*="search"]',
+            'input[placeholder*="search"]',
+            '.search-input',
+            '#search-input',
+            'input[type="text"]',
+            'textarea'
+        ];
+        
+        for (const selector of inputSelectors) {
+            try {
+                const element = await this.page.$(selector);
+                if (element) {
+                    await element.fill(text);
+                    console.log(`✅ Typed "${text}" into element with selector: ${selector}`);
+                    return {
+                        success: true,
+                        action: { type: 'type', text: text, selector: selector },
+                        method: 'direct_playwright_type'
+                    };
+                }
+            } catch (error) {
+                // Continue to next selector
+                continue;
+            }
+        }
+        
+        throw new Error('Could not find input element to type into');
+    }
+    
+    async handleDirectSelect(instruction) {
+        console.log('📋 Direct select fallback for:', instruction);
+        
+        // This is a placeholder for select operations
+        // Can be expanded based on specific needs
+        throw new Error('Direct select fallback not yet implemented');
+    }
+    
+    async handleComplexActionFallback(instruction) {
+        console.log('🔍 Complex action fallback for:', instruction);
+        
+        // For search operations, try a combined approach
+        if (instruction.toLowerCase().includes('search')) {
+            try {
+                // First try to type in search box
+                await this.handleDirectType(instruction);
+                
+                // Then try to click search button
+                await this.handleDirectClick('click search button');
+                
+                return {
+                    success: true,
+                    action: { type: 'complex_search', instruction: instruction },
+                    method: 'combined_playwright_actions'
+                };
+                
+            } catch (error) {
+                console.error('❌ Complex search fallback failed:', error.message);
+                throw error;
+            }
+        }
+        
+        throw new Error('Complex action fallback not implemented for this instruction type');
     }
 
     parseActionFromInstruction(instruction) {
@@ -684,19 +1099,23 @@ class StagehandAutomationEngine {
     // ===== ENHANCED RECORDING METHODS =====
 
     /**
-     * Start enhanced recording session with variable detection
+     * Start enhanced recording session with Playwright script generation
      */
     async startRecording(automationId, options = {}) {
         if (this.isRecording) {
             throw new Error('Recording session already active');
         }
 
-        console.log(`📹 Starting enhanced recording session for automation: ${automationId}`);
+        console.log(`📹 Starting Playwright recording session for automation: ${automationId}`);
         
         this.isRecording = true;
         this.recordedActions = [];
         
-        // Create new recording session
+        // Start the Playwright recorder
+        const automationName = options.name || `automation_${automationId}`;
+        this.playwrightRecorder.startRecording(automationId, automationName);
+        
+        // Create new recording session (for compatibility)
         this.currentRecordingSession = new RecordingSession({
             automationId: automationId,
             sessionId: Date.now().toString(),
@@ -708,29 +1127,32 @@ class StagehandAutomationEngine {
             }
         });
 
-        // Set up page event listeners for recording
+        // Set up page event listeners for recording (legacy support)
         await this.setupRecordingListeners();
         
-        console.log(`✅ Recording session started: ${this.currentRecordingSession.id}`);
+        console.log(`✅ Playwright recording session started: ${this.currentRecordingSession.id}`);
         return this.currentRecordingSession;
     }
 
     /**
-     * Stop recording and analyze variables
+     * Stop recording and generate Playwright script
      */
     async stopRecording() {
         if (!this.isRecording) {
             throw new Error('No active recording session');
         }
 
-        console.log(`⏹️ Stopping recording session: ${this.currentRecordingSession.id}`);
+        console.log(`⏹️ Stopping Playwright recording session: ${this.currentRecordingSession.id}`);
         
         this.isRecording = false;
         
         // Remove event listeners
         await this.removeRecordingListeners();
         
-        // Analyze recorded actions for variables
+        // Stop the Playwright recorder and get the generated script
+        const playwrightResult = this.playwrightRecorder.stopRecording();
+        
+        // Analyze recorded actions for variables (legacy support)
         const detectedVariables = await this.analyzeRecordedVariables();
         
         // Complete the recording session
@@ -742,10 +1164,15 @@ class StagehandAutomationEngine {
             actions: this.recordedActions,
             variables: detectedVariables,
             actionCount: this.recordedActions.length,
-            variableCount: detectedVariables.length
+            variableCount: detectedVariables.length,
+            // NEW: Add Playwright script generation
+            playwrightScript: playwrightResult.script,
+            scriptFilename: playwrightResult.filename,
+            playwrightVariables: playwrightResult.session.variables
         };
         
-        console.log(`✅ Recording completed: ${result.actionCount} actions, ${result.variableCount} variables detected`);
+        console.log(`✅ Playwright recording completed: ${result.actionCount} actions, ${result.variableCount} variables detected`);
+        console.log(`🎬 Generated Playwright script: ${playwrightResult.filename}`);
         
         // Reset recording state
         this.currentRecordingSession = null;
@@ -977,6 +1404,47 @@ class StagehandAutomationEngine {
     }
 
     /**
+     * Record a successful action with the Playwright recorder
+     */
+    recordSuccessfulAction(instruction, result) {
+        if (!this.isRecording || !this.playwrightRecorder) return;
+
+        try {
+            // Get current URL for redirect detection
+            const currentUrl = this.page ? this.page.url() : null;
+            
+            // Analyze instruction to determine action type and record appropriately
+            const instructionLower = instruction.toLowerCase();
+            
+            if (instructionLower.includes('fill') && instructionLower.includes('cpf')) {
+                // Record CPF form fill with current URL for redirect detection
+                const value = instruction.match(/["']([^"']+)["']/)?.[1] || '000.000.000-00';
+                this.playwrightRecorder.recordFormFill('cpf', value, null, currentUrl);
+                console.log(`🎬 Recorded CPF form fill on URL: ${currentUrl}`);
+                
+            } else if (instructionLower.includes('fill') && (instructionLower.includes('password') || instructionLower.includes('senha'))) {
+                // Record password form fill with current URL for redirect detection
+                const value = instruction.match(/["']([^"']+)["']/)?.[1] || 'password';
+                this.playwrightRecorder.recordFormFill('password', value, null, currentUrl);
+                console.log(`🎬 Recorded password form fill on URL: ${currentUrl}`);
+                
+            } else if (instructionLower.includes('click')) {
+                // Record click action
+                this.playwrightRecorder.recordClick(instruction);
+                console.log(`🎬 Recorded click action: "${instruction}"`);
+                
+            } else {
+                // Record generic action
+                this.playwrightRecorder.recordStagehandAction(instruction, { success: true });
+                console.log(`🎬 Recorded successful action: "${instruction}"`);
+            }
+            
+        } catch (error) {
+            console.warn(`⚠️ Failed to record action for Playwright script: ${error.message}`);
+        }
+    }
+
+    /**
      * Process variable string with substitution and validation
      */
     processVariableString(text) {
@@ -1196,7 +1664,7 @@ class StagehandAutomationEngine {
                 if (this.robustInteraction) {
                     return await this.robustClick(processedAction.selector);
                 } else {
-                    await this.page.act(processedAction.instruction || `Click ${processedAction.selector}`);
+                    await this.robustPageAct(processedAction.instruction || `Click ${processedAction.selector}`);
                     return { type: 'click', selector: processedAction.selector };
                 }
                 
@@ -1205,7 +1673,7 @@ class StagehandAutomationEngine {
                     return await this.robustType(processedAction.selector, processedAction.text);
                 } else {
                     const instruction = `Type "${processedAction.text}" in ${processedAction.selector}`;
-                    await this.page.act(instruction);
+                    await this.robustPageAct(instruction);
                     return { type: 'type', selector: processedAction.selector, text: processedAction.text };
                 }
                 
@@ -1214,7 +1682,7 @@ class StagehandAutomationEngine {
                     return await this.robustSelect(processedAction.selector, processedAction.value);
                 } else {
                     const instruction = `Select "${processedAction.value}" from ${processedAction.selector}`;
-                    await this.page.act(instruction);
+                    await this.robustPageAct(instruction);
                     return { type: 'select', selector: processedAction.selector, value: processedAction.value };
                 }
                 
@@ -1224,9 +1692,9 @@ class StagehandAutomationEngine {
                 return { type: 'wait', duration: waitTime };
                 
             default:
-                // Use Stagehand's general action processing
+                // Use Stagehand's general action processing with robust wrapper
                 const instruction = processedAction.instruction || processedAction.description;
-                await this.page.act(instruction);
+                await this.robustPageAct(instruction);
                 return { type: 'action', instruction };
         }
     }
@@ -1282,6 +1750,603 @@ class StagehandAutomationEngine {
         this.variableValidationService = validationService;
         console.log('🔍 Variable validation service enabled');
     }
+
+    // ==================== WORKFLOW SYSTEM INTEGRATION ====================
+    
+    /**
+     * Initialize workflow system components
+     */
+    async initializeWorkflowSystem() {
+        const workflowIntegration = require('./modules/workflow/workflow-integration');
+        return await workflowIntegration.initializeWorkflowSystem.call(this);
+    }
+    
+    /**
+     * Register step handlers with the step executor
+     */
+    async registerStepHandlers() {
+        const workflowIntegration = require('./modules/workflow/workflow-integration');
+        return await workflowIntegration.registerStepHandlers.call(this);
+    }
+    
+    /**
+     * Set up workflow event listeners
+     */
+    setupWorkflowEventListeners() {
+        const workflowIntegration = require('./modules/workflow/workflow-integration');
+        return workflowIntegration.setupWorkflowEventListeners.call(this);
+    }
+    
+    /**
+     * Execute workflow from definition
+     */
+    async executeWorkflow(workflowDefinition, context = {}) {
+        const workflowIntegration = require('./modules/workflow/workflow-integration');
+        return await workflowIntegration.executeWorkflow.call(this, workflowDefinition, context);
+    }
+    
+    /**
+     * Convert automation steps to workflow format
+     */
+    convertAutomationToWorkflow(automation) {
+        const workflowIntegration = require('./modules/workflow/workflow-integration');
+        return workflowIntegration.convertAutomationToWorkflow.call(this, automation);
+    }
+    
+    /**
+     * Execute automation as workflow
+     */
+    async executeAutomationAsWorkflow(automation, context = {}) {
+        const workflowIntegration = require('./modules/workflow/workflow-integration');
+        return await workflowIntegration.executeAutomationAsWorkflow.call(this, automation, context);
+    }
+    
+    /**
+     * Get active workflow statuses
+     */
+    getActiveWorkflows() {
+        const workflowIntegration = require('./modules/workflow/workflow-integration');
+        return workflowIntegration.getActiveWorkflows.call(this);
+    }
+    
+    /**
+     * Pause workflow execution
+     */
+    async pauseWorkflow(executionId) {
+        const workflowIntegration = require('./modules/workflow/workflow-integration');
+        return await workflowIntegration.pauseWorkflow.call(this, executionId);
+    }
+    
+    /**
+     * Resume workflow execution
+     */
+    async resumeWorkflow(executionId) {
+        const workflowIntegration = require('./modules/workflow/workflow-integration');
+        return await workflowIntegration.resumeWorkflow.call(this, executionId);
+    }
+    
+    /**
+     * Stop workflow execution
+     */
+    async stopWorkflow(executionId, reason = 'user_requested') {
+        const workflowIntegration = require('./modules/workflow/workflow-integration');
+        return await workflowIntegration.stopWorkflow.call(this, executionId, reason);
+    }
+    
+    /**
+     * Get workflow execution status
+     */
+    getWorkflowStatus(executionId) {
+        const workflowIntegration = require('./modules/workflow/workflow-integration');
+        return workflowIntegration.getWorkflowStatus.call(this, executionId);
+    }
+    
+    /**
+     * Create workflow from recorded actions
+     */
+    createWorkflowFromRecording(recordedActions, metadata = {}) {
+        const workflowIntegration = require('./modules/workflow/workflow-integration');
+        return workflowIntegration.createWorkflowFromRecording.call(this, recordedActions, metadata);
+    }
+    
+    /**
+     * Get workflow system statistics
+     */
+    getWorkflowStats() {
+        const workflowIntegration = require('./modules/workflow/workflow-integration');
+        return workflowIntegration.getWorkflowStats.call(this);
+    }
+    
+    // ==================== ENHANCED AUTOMATION METHODS ====================
+    
+    /**
+     * Enhanced instruction processing with workflow support
+     */
+    async processInstructionAsWorkflow(instruction, options = {}) {
+        try {
+            // Create a simple workflow from the instruction
+            const workflow = {
+                id: `instruction_${Date.now()}`,
+                name: 'Instruction Workflow',
+                description: `Workflow for instruction: ${instruction}`,
+                version: '1.0.0',
+                steps: [{
+                    id: 'instruction_step',
+                    type: 'interaction',
+                    name: 'Process Instruction',
+                    action: 'instruction',
+                    target: instruction,
+                    timeout: options.timeout || 30000,
+                    retryOptions: {
+                        maxRetries: options.retryAttempts || 3,
+                        retryDelay: 1000
+                    },
+                    continueOnError: false
+                }],
+                variables: options.variables || [],
+                settings: {
+                    timeout: options.timeout || 30000,
+                    retryAttempts: options.retryAttempts || 3,
+                    continueOnError: false
+                }
+            };
+            
+            // Execute as workflow
+            return await this.executeWorkflow(workflow, {
+                sessionId: options.sessionId,
+                variables: options.variables || {}
+            });
+            
+        } catch (error) {
+            console.error('❌ Enhanced instruction processing failed:', error.message);
+            throw error;
+        }
+    }
+    
+    /**
+     * Execute multiple steps sequentially
+     */
+    async executeSequentialSteps(steps, context = {}) {
+        try {
+            const workflow = {
+                id: `sequential_${Date.now()}`,
+                name: 'Sequential Steps',
+                description: 'Sequential execution of multiple steps',
+                version: '1.0.0',
+                steps: steps.map((step, index) => ({
+                    id: step.id || `step_${index + 1}`,
+                    type: step.type || 'interaction',
+                    name: step.name || `Step ${index + 1}`,
+                    action: step.action,
+                    target: step.target,
+                    value: step.value,
+                    timeout: step.timeout || 30000,
+                    retryOptions: {
+                        maxRetries: step.retryAttempts || 3,
+                        retryDelay: 1000
+                    },
+                    continueOnError: step.continueOnError || false,
+                    conditions: step.conditions || [],
+                    waitFor: step.waitFor,
+                    metadata: step.metadata || {}
+                })),
+                variables: context.variables || [],
+                settings: {
+                    timeout: context.timeout || 30000,
+                    retryAttempts: context.retryAttempts || 3,
+                    continueOnError: context.continueOnError || false
+                }
+            };
+            
+            return await this.executeWorkflow(workflow, context);
+            
+        } catch (error) {
+            console.error('❌ Sequential steps execution failed:', error.message);
+            throw error;
+        }
+    }
+    
+    /**
+     * Execute automation with enhanced error recovery and timing
+     */
+    async executeEnhancedAutomation(automation, context = {}) {
+        try {
+            console.log(`🚀 Executing enhanced automation: ${automation.name || automation.id}`);
+            
+            // Convert to workflow format
+            const workflow = this.convertAutomationToWorkflow(automation);
+            
+            // Add enhanced timing and error recovery settings
+            workflow.settings = {
+                ...workflow.settings,
+                adaptiveTimeouts: true,
+                smartRetries: true,
+                errorRecovery: true,
+                stabilityChecks: true
+            };
+            
+            // Execute with workflow engine
+            const result = await this.executeWorkflow(workflow, {
+                ...context,
+                enhancedMode: true,
+                timingController: this.timingController,
+                errorRecovery: this.errorRecovery
+            });
+            
+            console.log(`✅ Enhanced automation completed: ${automation.name || automation.id}`);
+            return result;
+            
+        } catch (error) {
+            console.error('❌ Enhanced automation execution failed:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Enhanced form field detection and interaction
+     */
+    async executeFormAction(actionType, fieldType, value, options = {}) {
+        try {
+            console.log(`🎯 Enhanced form action: ${actionType} on ${fieldType} field`);
+            
+            // Generate specific instruction for form fields
+            const instruction = this.generateFormInstruction(actionType, fieldType, value);
+            
+            // Add element validation before action
+            await this.validateTargetElement(fieldType);
+            
+            // Execute with robust wrapper and timeout protection
+            await this.robustPageAct(instruction, { timeout: 25000 });
+            
+            console.log(`✅ Form ${actionType} completed successfully`);
+            return { success: true, instruction, fieldType, value };
+            
+        } catch (error) {
+            console.error(`❌ Form ${actionType} failed:`, error.message);
+            
+            // Try fallback strategy for form fields
+            if (error.message.includes('Element is not an <input>') || 
+                error.message.includes('xpath=/html')) {
+                console.log('🔄 Attempting fallback form field strategy...');
+                return await this.fallbackFormFieldAction(actionType, fieldType, value);
+            }
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Generate specific instructions for form fields
+     */
+    generateFormInstruction(actionType, fieldType, value) {
+        if (actionType === 'type' || actionType === 'fill') {
+            // Enhanced field-specific instructions with better targeting
+            if (fieldType === 'cpf') {
+                return `Fill the CPF number "${value}" in the first text input field that accepts document numbers or login credentials (not the password field)`;
+            } else if (fieldType === 'password') {
+                return `Fill the password "${value}" in the password input field (type="password") - do NOT fill the CPF/document field that was already filled`;
+            } else if (fieldType === 'email') {
+                return `Fill the email address "${value}" in the email input field (type="email") or login field`;
+            } else if (fieldType === 'phone') {
+                return `Fill the phone number "${value}" in the phone or telephone input field`;
+            } else if (fieldType === 'name') {
+                return `Fill the name "${value}" in the name input field`;
+            } else {
+                return `Fill "${value}" in the ${fieldType} input field`;
+            }
+        } else if (actionType === 'click') {
+            if (fieldType === 'submit' || fieldType === 'login') {
+                return `Click the login button or submit button to proceed`;
+            } else {
+                return `Click the ${fieldType} button`;
+            }
+        }
+        
+        return `${actionType} ${value} in ${fieldType} field`;
+    }
+
+    /**
+     * Validate that we're targeting the correct element type
+     */
+    async validateTargetElement(fieldType) {
+        try {
+            // Use Stagehand's extract capability to validate page content
+            const pageInfo = await this.page.extract({
+                instruction: `Find ${fieldType} input fields on this page`,
+                schema: z.object({
+                    hasEmailField: z.boolean().describe('Does the page have an email/login input field?'),
+                    hasPasswordField: z.boolean().describe('Does the page have a password input field?'),
+                    hasSubmitButton: z.boolean().describe('Does the page have a submit/login button?'),
+                    formCount: z.number().describe('How many forms are on this page?')
+                })
+            });
+            
+            console.log('📋 Page validation:', pageInfo);
+            
+            // Validate that required fields exist
+            if (fieldType === 'email' && !pageInfo.hasEmailField) {
+                console.warn('⚠️ Email field not detected on page');
+            }
+            if (fieldType === 'password' && !pageInfo.hasPasswordField) {
+                console.warn('⚠️ Password field not detected on page');
+            }
+            
+            return pageInfo;
+            
+        } catch (error) {
+            console.warn('⚠️ Element validation failed:', error.message);
+            // Continue anyway - validation is best effort
+            return null;
+        }
+    }
+
+    /**
+     * Fallback strategy for form field interaction
+     */
+    async fallbackFormFieldAction(actionType, fieldType, value) {
+        try {
+            console.log('🔄 Attempting Playwright fallback for form fields...');
+            
+            // Direct Playwright selectors for common form fields
+            const selectors = this.getFormFieldSelectors(fieldType);
+            
+            for (const selector of selectors) {
+                try {
+                    const element = await this.page.$(selector);
+                    if (element) {
+                        console.log(`✓ Found ${fieldType} field with selector: ${selector}`);
+                        
+                        if (actionType === 'type' || actionType === 'fill') {
+                            await element.fill(value);
+                        } else if (actionType === 'click') {
+                            await element.click();
+                        }
+                        
+                        console.log(`✅ Fallback ${actionType} successful`);
+                        return { success: true, method: 'playwright_fallback', selector, value };
+                    }
+                } catch (selectorError) {
+                    console.log(`✗ Selector ${selector} failed: ${selectorError.message}`);
+                    continue;
+                }
+            }
+            
+            throw new Error(`No working selectors found for ${fieldType} field`);
+            
+        } catch (error) {
+            console.error(`❌ Fallback strategy failed: ${error.message}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Get common selectors for form field types (prioritized for Brazilian forms)
+     */
+    getFormFieldSelectors(fieldType) {
+        const selectorMaps = {
+            email: [
+                'input[type="email"]',
+                'input[name*="email"]',
+                'input[id*="email"]',
+                'input[placeholder*="email" i]',
+                'input[name*="login"]',
+                'input[id*="login"]',
+                'input[name*="username"]',
+                'input[id*="username"]',
+                'input[placeholder*="E-mail" i]',
+                'input[class*="email"]'
+            ],
+            password: [
+                'input[type="password"]',  // Most specific - always try first
+                'input[name*="senha" i]',
+                'input[id*="senha" i]',
+                'input[placeholder*="senha" i]',
+                'input[name*="password" i]',
+                'input[id*="password" i]',
+                'input[placeholder*="password" i]',
+                'input[class*="password"]',
+                'input[class*="senha"]'
+            ],
+            cpf: [
+                // Try CPF-specific fields first (these should NOT be password fields)
+                'input[name*="cpf" i]:not([type="password"])',
+                'input[id*="cpf" i]:not([type="password"])',
+                'input[placeholder*="CPF" i]:not([type="password"])',
+                'input[name*="document" i]:not([type="password"])',
+                'input[id*="document" i]:not([type="password"])',
+                'input[name*="usuario" i]:not([type="password"])',
+                'input[id*="usuario" i]:not([type="password"])',
+                'input[name*="login" i]:not([type="password"])',
+                'input[id*="login" i]:not([type="password"])',
+                'input[maxlength="14"]:not([type="password"])', // CPF formatted length
+                'input[maxlength="11"]:not([type="password"])', // CPF unformatted length
+                'input[pattern*="cpf" i]:not([type="password"])',
+                'input[title*="CPF" i]:not([type="password"])',
+                'input[data-field*="cpf" i]:not([type="password"])',
+                'input[class*="cpf" i]:not([type="password"])',
+                // Generic text input only as last resort, and specifically exclude password fields
+                'input[type="text"]:not([type="password"]):not([name*="senha"]):not([id*="senha"]):not([placeholder*="senha"])'
+            ],
+            submit: [
+                'button[type="submit"]',
+                'input[type="submit"]',
+                'button:has-text("Entrar")',
+                'button:has-text("Login")',
+                'button:has-text("Acessar")',
+                'button:has-text("Sign in")',
+                'button[class*="login"]',
+                'button[class*="entrar"]',
+                'button[class*="submit"]',
+                'button[id*="login"]',
+                'button[id*="entrar"]',
+                '.login-button',
+                '.submit-button',
+                '.btn-login',
+                '.btn-entrar'
+            ]
+        };
+        
+        return selectorMaps[fieldType] || [`input[name*="${fieldType}"]`, `input[id*="${fieldType}"]`];
+    }
+
+    /**
+     * Robust wrapper for Stagehand page.act() calls with comprehensive error handling
+     * @param {string} instruction - The instruction to execute
+     * @param {Object} options - Execution options
+     * @returns {Promise<any>} Action result
+     */
+    async robustPageAct(instruction, options = {}) {
+        if (!instruction || typeof instruction !== 'string' || instruction.trim() === '') {
+            throw new Error('Invalid instruction provided to Stagehand: instruction must be a non-empty string');
+        }
+
+        const cleanInstruction = instruction.trim();
+        const maxRetries = options.maxRetries || 3;
+        const timeout = options.timeout || 30000;
+        
+        console.log(`🎯 Robust page.act() call: "${cleanInstruction}"`);
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                // Validate page state before attempting action
+                if (!this.page || this.page.isClosed()) {
+                    throw new Error('Page is not available or has been closed');
+                }
+                
+                // Create timeout promise
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error(`Stagehand action timeout after ${timeout}ms`)), timeout);
+                });
+                
+                // Execute action with timeout protection
+                console.log(`🤖 Attempt ${attempt}/${maxRetries}: Executing Stagehand action...`);
+                const actionPromise = this.page.act(cleanInstruction);
+                
+                const result = await Promise.race([actionPromise, timeoutPromise]);
+                console.log(`✅ Stagehand action completed successfully on attempt ${attempt}`);
+                
+                // Record successful action in Playwright recorder
+                this.recordSuccessfulAction(cleanInstruction, result);
+                
+                return result;
+                
+            } catch (error) {
+                console.error(`❌ Attempt ${attempt}/${maxRetries} failed:`, error.message);
+                
+                // Check if this is the internal Stagehand error we're trying to fix
+                if (error.message.includes('Cannot read properties of undefined')) {
+                    console.log(`🔧 Detected Stagehand internal error, attempting recovery...`);
+                    
+                    // Wait before retry to allow any internal state to settle
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    // Try to refresh page state if this is the last retry
+                    if (attempt === maxRetries) {
+                        console.log(`🔄 Final attempt: Using fallback Playwright actions...`);
+                        return await this.executePlaywrightFallback(cleanInstruction);
+                    }
+                    
+                    continue; // Retry the action
+                }
+                
+                // For other errors, check if we should retry
+                if (attempt >= maxRetries) {
+                    throw new Error(`Stagehand action failed after ${maxRetries} attempts: ${error.message}`);
+                }
+                
+                // Wait before retry for retryable errors
+                const retryDelay = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Exponential backoff, max 5s
+                console.log(`⏳ Waiting ${retryDelay}ms before retry...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+            }
+        }
+    }
+
+    /**
+     * Fallback to direct Playwright actions when Stagehand fails
+     * @param {string} instruction - The original instruction
+     * @returns {Promise<any>} Fallback result
+     */
+    async executePlaywrightFallback(instruction) {
+        console.log(`🎭 Executing Playwright fallback for: "${instruction}"`);
+        
+        try {
+            // Parse instruction and attempt direct Playwright actions
+            const lowerInstruction = instruction.toLowerCase();
+            
+            // Navigation commands
+            if (lowerInstruction.includes('navigate') || lowerInstruction.includes('go to') || lowerInstruction.includes('visit')) {
+                const urlMatch = instruction.match(/https?:\/\/[^\s]+/);
+                if (urlMatch) {
+                    console.log(`🌐 Fallback navigation to: ${urlMatch[0]}`);
+                    await this.page.goto(urlMatch[0], { waitUntil: 'networkidle' });
+                    
+                    // ✅ FIXED: Record navigation in PlaywrightRecorder during Playwright fallback
+                    if (this.isRecording && this.playwrightRecorder) {
+                        this.playwrightRecorder.recordNavigation(urlMatch[0]);
+                        console.log(`🎬 Recorded Playwright fallback navigation: ${urlMatch[0]}`);
+                    }
+                    
+                    return { success: true, action: 'navigation', url: urlMatch[0] };
+                }
+            }
+            
+            // Click commands
+            if (lowerInstruction.includes('click')) {
+                // Try to find clickable elements with common selectors
+                const clickableSelectors = [
+                    'button', 'a', '[role="button"]', 'input[type="submit"]', 
+                    'input[type="button"]', '.btn', '.button'
+                ];
+                
+                for (const selector of clickableSelectors) {
+                    try {
+                        const elements = await this.page.$$(selector);
+                        for (const element of elements) {
+                            const text = await element.textContent();
+                            if (text && instruction.toLowerCase().includes(text.toLowerCase())) {
+                                console.log(`🖱️ Fallback click on element with text: "${text}"`);
+                                await element.click();
+                                return { success: true, action: 'click', text };
+                            }
+                        }
+                    } catch (e) {
+                        // Continue to next selector
+                    }
+                }
+            }
+            
+            // Fill/type commands
+            if (lowerInstruction.includes('fill') || lowerInstruction.includes('type') || lowerInstruction.includes('enter')) {
+                // Extract the value to fill
+                const valueMatch = instruction.match(/["']([^"']+)["']/) || instruction.match(/with\s+([^\s]+)/);
+                if (valueMatch) {
+                    const value = valueMatch[1];
+                    const inputSelectors = ['input[type="text"]', 'input[type="email"]', 'input[type="password"]', 'textarea'];
+                    
+                    for (const selector of inputSelectors) {
+                        try {
+                            const input = await this.page.$(selector);
+                            if (input) {
+                                console.log(`⌨️ Fallback fill input with: "${value}"`);
+                                await input.fill(value);
+                                return { success: true, action: 'fill', value };
+                            }
+                        } catch (e) {
+                            // Continue to next selector
+                        }
+                    }
+                }
+            }
+            
+            console.log(`⚠️ Fallback: Could not parse instruction "${instruction}" into direct Playwright actions`);
+            return { success: false, action: 'fallback_failed', instruction };
+            
+        } catch (error) {
+            console.error(`❌ Playwright fallback failed:`, error.message);
+            throw new Error(`Both Stagehand and Playwright fallback failed: ${error.message}`);
+        }
+    }
 }
 
-module.exports = StagehandAutomationEngine; 
+module.exports = StagehandAutomationEngine;

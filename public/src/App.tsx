@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Layout from './components/layout/Layout';
 import VariableEditorModal from './components/automation/VariableEditorModal';
+import VariableInputModal from './components/automation/VariableInputModal';
+import ExecutionStatusDisplay from './components/automation/ExecutionStatusDisplay';
 
 interface Automation {
   id: string;
@@ -17,6 +19,31 @@ interface Message {
   text: string;
   type: 'user' | 'bot' | 'system' | 'error';
   timestamp: Date;
+}
+
+interface ExecutionStatus {
+  executionId: string;
+  automationId: string;
+  status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+  currentStep: number;
+  totalSteps: number;
+  progress: number;
+  startTime: string;
+  endTime?: string;
+  duration?: number;
+  successfulSteps: number;
+  errorCount: number;
+  metadata: {
+    automationName: string;
+    hasVariables: boolean;
+  };
+}
+
+interface ExecutionLog {
+  timestamp: string;
+  level: string;
+  message: string;
+  stepIndex?: number;
 }
 
 type MessageType = 'user' | 'bot' | 'system' | 'error';
@@ -45,6 +72,18 @@ const App: React.FC = () => {
   const [selectedAutomation, setSelectedAutomation] = useState<Automation | null>(null);
   const [automationVariables, setAutomationVariables] = useState<any[]>([]);
 
+  // Variable Input Modal state (for editing variables before running)
+  const [isVariableInputModalOpen, setIsVariableInputModalOpen] = useState(false);
+  const [variableInputAutomation, setVariableInputAutomation] = useState<Automation | null>(null);
+
+  // Execution Status Display state
+  const [isExecutionStatusVisible, setIsExecutionStatusVisible] = useState(false);
+  const [currentExecutionStatus, setCurrentExecutionStatus] = useState<ExecutionStatus | null>(null);
+  const [executionLogs, setExecutionLogs] = useState<ExecutionLog[]>([]);
+  
+  // Multiple execution statuses for left panel
+  const [allExecutionStatuses, setAllExecutionStatuses] = useState<ExecutionStatus[]>([]);
+
   // WebSocket connection
   useEffect(() => {
     const connect = async () => {
@@ -54,7 +93,16 @@ const App: React.FC = () => {
         const data = await res.json();
         const token = data.token;
 
-        const socket = new WebSocket(`ws://localhost:7079?token=${token}`);
+        // Get or generate session ID
+        let sessionId = localStorage.getItem('browser_automation_session_id');
+        
+        // Build WebSocket URL with session ID if available
+        const wsUrl = sessionId 
+          ? `ws://localhost:7079?token=${token}&sessionId=${sessionId}`
+          : `ws://localhost:7079?token=${token}`;
+
+        console.log(`🔗 Connecting to: ${wsUrl}`);
+        const socket = new WebSocket(wsUrl);
 
         socket.onopen = () => {
           setConnectionStatus('connected');
@@ -63,28 +111,30 @@ const App: React.FC = () => {
           // Request automations from server
           socket.send(JSON.stringify({ type: 'get_automations' }));
           
-          // Add welcome messages
-          const welcomeMessages: Message[] = [
-            {
-              id: Date.now().toString(),
-              text: '👋 Welcome to AutoFlow! I\'m your browser automation assistant.',
-              type: 'bot',
-              timestamp: new Date()
-            },
-            {
-              id: (Date.now() + 1).toString(),
-              text: 'I can help you create automations by recording your actions and replaying them with different data.',
-              type: 'bot',
-              timestamp: new Date()
-            },
-            {
-              id: (Date.now() + 2).toString(),
-              text: '🚀 Get started by creating a new automation or typing a command like "Navigate to google.com"',
-              type: 'bot',
-              timestamp: new Date()
-            }
-          ];
-          setMessages(welcomeMessages);
+          // Add welcome messages (only for new sessions)
+          if (!sessionId) {
+            const welcomeMessages: Message[] = [
+              {
+                id: Date.now().toString(),
+                text: '👋 Welcome to AutoFlow! I\'m your browser automation assistant.',
+                type: 'bot',
+                timestamp: new Date()
+              },
+              {
+                id: (Date.now() + 1).toString(),
+                text: 'I can help you create automations by recording your actions and replaying them with different data.',
+                type: 'bot',
+                timestamp: new Date()
+              },
+              {
+                id: (Date.now() + 2).toString(),
+                text: '🚀 Get started by creating a new automation or typing a command like "Navigate to google.com"',
+                type: 'bot',
+                timestamp: new Date()
+              }
+            ];
+            setMessages(welcomeMessages);
+          }
         };
 
         socket.onmessage = (event) => {
@@ -131,6 +181,33 @@ const App: React.FC = () => {
 
   const handleMessage = (data: any) => {
     switch (data.type) {
+      case 'status':
+        // Store session ID for future connections
+        if (data.sessionId) {
+          localStorage.setItem('browser_automation_session_id', data.sessionId);
+          console.log(`💾 Session ID stored: ${data.sessionId}`);
+          
+          // Show different message for resumed sessions
+          if (data.resumed) {
+            const resumedMessage: Message = {
+              id: Date.now().toString(),
+              text: `🔄 Welcome back! Resumed session ${data.sessionId}`,
+              type: 'bot',
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, resumedMessage]);
+          }
+        }
+        
+        const statusMessage: Message = {
+          id: Date.now().toString(),
+          text: data.message,
+          type: 'bot',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, statusMessage]);
+        break;
+
       case 'screenshot':
         if (data.data) {
           setScreenshotSrc(`data:image/jpeg;base64,${data.data}`);
@@ -178,6 +255,17 @@ const App: React.FC = () => {
         }
         break;
 
+      case 'manual_mode_toggled':
+        console.log(`👤 Manual mode ${data.isManualMode ? 'enabled' : 'disabled'}`);
+        setIsManualMode(data.isManualMode);
+        addMessage(data.message, 'system');
+        break;
+
+      case 'pause_toggled':
+        setIsPaused(data.isPaused);
+        addMessage(data.message, 'system');
+        break;
+
       case 'automation_started':
         if (data.automationId) {
           setAutomations(prev => prev.map(a => 
@@ -185,6 +273,116 @@ const App: React.FC = () => {
           ));
         }
         addMessage(data.message, 'system');
+        break;
+
+      // Execution status events
+      case 'execution_started':
+        if (data.context) {
+          setCurrentExecutionStatus(data.context);
+          setExecutionLogs([]);
+          setIsExecutionStatusVisible(true);
+          
+          // Add to all execution statuses for left panel
+          setAllExecutionStatuses(prev => {
+            const filtered = prev.filter(status => status.executionId !== data.context.executionId);
+            return [...filtered, data.context];
+          });
+        }
+        break;
+
+      case 'execution_progress':
+        if (data.executionId && currentExecutionStatus?.executionId === data.executionId) {
+          setCurrentExecutionStatus(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              currentStep: data.currentStep,
+              progress: data.progress,
+              status: data.status
+            };
+          });
+        }
+        
+        // Update in all execution statuses for left panel
+        setAllExecutionStatuses(prev => 
+          prev.map(status => 
+            status.executionId === data.executionId 
+              ? { ...status, currentStep: data.currentStep, progress: data.progress, status: data.status }
+              : status
+          )
+        );
+        break;
+
+      case 'execution_log':
+        if (data.log) {
+          setExecutionLogs(prev => [...prev, data.log]);
+        }
+        break;
+
+      case 'execution_completed':
+        if (data.executionId && currentExecutionStatus?.executionId === data.executionId) {
+          setCurrentExecutionStatus(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              status: 'completed',
+              endTime: data.endTime || new Date().toISOString(),
+              duration: data.duration
+            };
+          });
+        }
+        break;
+
+      case 'execution_failed':
+        if (data.executionId && currentExecutionStatus?.executionId === data.executionId) {
+          setCurrentExecutionStatus(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              status: 'failed',
+              endTime: data.endTime || new Date().toISOString(),
+              duration: data.duration,
+              errorCount: (prev.errorCount || 0) + 1
+            };
+          });
+        }
+        break;
+
+      case 'execution_paused':
+        if (data.executionId && currentExecutionStatus?.executionId === data.executionId) {
+          setCurrentExecutionStatus(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              status: 'paused'
+            };
+          });
+        }
+        break;
+
+      case 'execution_resumed':
+        if (data.executionId && currentExecutionStatus?.executionId === data.executionId) {
+          setCurrentExecutionStatus(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              status: 'running'
+            };
+          });
+        }
+        break;
+
+      case 'execution_stopped':
+        if (data.executionId && currentExecutionStatus?.executionId === data.executionId) {
+          setCurrentExecutionStatus(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              status: 'cancelled',
+              endTime: data.endTime || new Date().toISOString()
+            };
+          });
+        }
         break;
 
       case 'automation_stopped':
@@ -326,6 +524,18 @@ const App: React.FC = () => {
     }
   };
 
+  // Clear session and start fresh
+  const clearSession = () => {
+    localStorage.removeItem('browser_automation_session_id');
+    // Reconnect with new session
+    window.location.reload();
+  };
+
+  // Get current session ID
+  const getCurrentSessionId = () => {
+    return localStorage.getItem('browser_automation_session_id');
+  };
+
   // Event handlers
   const handleNavigate = (newUrl: string) => {
     setIsLoading(true);
@@ -433,25 +643,24 @@ const App: React.FC = () => {
     }
   };
 
-  const handleRunAutomation = (automationId: string) => {
+  const handleRunAutomation = (automationId: string, variables?: Record<string, string>) => {
     const automation = automations.find(a => a.id === automationId);
     if (automation) {
-      // If automation has variables, prompt for values
-      if (automation.variableCount && automation.variableCount > 0) {
-        addMessage(`📝 Please provide variables for "${automation.name}"`, 'system');
-        
-        // Request variable details from server to show proper examples
-        sendCommand({ type: 'get_automation_variables', automationId });
-        
-        // Store the automation ID for when variables are provided
-        sessionStorage.setItem('pendingAutomationId', automationId);
-      } else {
-        setAutomations(prev => prev.map(a => 
-          a.id === automationId ? { ...a, status: 'running' as const } : a
-        ));
-        addMessage(`Running automation: ${automation.name}`, 'system');
-        sendCommand({ type: 'run_automation', automationId });
-      }
+      // Update automation status to running
+      setAutomations(prev => prev.map(a => 
+        a.id === automationId ? { ...a, status: 'running' as const } : a
+      ));
+      
+      // Run automation immediately with existing variables or provided variables
+      const variableInfo = variables ? ` with ${Object.keys(variables).length} variables` : 
+                          automation.variableCount ? ` with ${automation.variableCount} existing variables` : '';
+      
+      addMessage(`Running automation: ${automation.name}${variableInfo}`, 'system');
+      sendCommand({ 
+        type: 'run_automation', 
+        automationId,
+        variables: variables // Only send if explicitly provided
+      });
     }
   };
 
@@ -492,7 +701,7 @@ const App: React.FC = () => {
     }
   };
 
-  // New: Variable Editor Modal handlers
+  // Variable Editor Modal handlers (for advanced editing)
   const handleOpenVariableEditor = async (automation: Automation) => {
     setSelectedAutomation(automation);
     
@@ -505,6 +714,24 @@ const App: React.FC = () => {
     }
     
     setIsVariableModalOpen(true);
+  };
+
+  // Variable Input Modal handlers (for quick editing before running)
+  const handleOpenVariableInput = async (automation: Automation) => {
+    setVariableInputAutomation(automation);
+    setIsVariableInputModalOpen(true);
+  };
+
+  const handleCloseVariableInput = () => {
+    setIsVariableInputModalOpen(false);
+    setVariableInputAutomation(null);
+  };
+
+  const handleSubmitVariableInput = (variables: Record<string, string>) => {
+    if (variableInputAutomation) {
+      // Run automation with the provided variables
+      handleRunAutomation(variableInputAutomation.id, variables);
+    }
   };
 
   const handleCloseVariableEditor = () => {
@@ -532,6 +759,69 @@ const App: React.FC = () => {
     }
   };
 
+  // Execution Status Display handlers
+  const handleCloseExecutionStatus = () => {
+    setIsExecutionStatusVisible(false);
+  };
+
+  const handlePauseExecution = () => {
+    if (currentExecutionStatus?.executionId) {
+      sendCommand({ 
+        type: 'pause_execution', 
+        executionId: currentExecutionStatus.executionId 
+      });
+    }
+  };
+
+  const handleResumeExecution = () => {
+    if (currentExecutionStatus?.executionId) {
+      sendCommand({ 
+        type: 'resume_execution', 
+        executionId: currentExecutionStatus.executionId 
+      });
+    }
+  };
+
+  const handleStopExecution = () => {
+    if (currentExecutionStatus?.executionId) {
+      sendCommand({ 
+        type: 'stop_execution', 
+        executionId: currentExecutionStatus.executionId,
+        reason: 'user_requested'
+      });
+    }
+  };
+
+  const handleRetryExecution = () => {
+    if (currentExecutionStatus?.automationId) {
+      // Re-run the same automation
+      handleRunAutomation(currentExecutionStatus.automationId);
+    }
+  };
+
+  // Left Panel execution control handlers
+  const handlePauseExecutionFromPanel = (executionId: string) => {
+    sendCommand({ 
+      type: 'pause_execution', 
+      executionId 
+    });
+  };
+
+  const handleResumeExecutionFromPanel = (executionId: string) => {
+    sendCommand({ 
+      type: 'resume_execution', 
+      executionId 
+    });
+  };
+
+  const handleStopExecutionFromPanel = (executionId: string) => {
+    sendCommand({ 
+      type: 'stop_execution', 
+      executionId,
+      reason: 'user_requested'
+    });
+  };
+
   // Removed automatic periodic refresh - automations will refresh only when needed
   // (on connection, after creation/deletion/editing operations)
 
@@ -540,47 +830,71 @@ const App: React.FC = () => {
       <Layout
         // Header props
         connectionStatus={connectionStatus}
+        isRecording={isRecording}
+        isManualMode={isManualMode}
+        onToggleRecording={handleToggleRecording}
+        onToggleManualMode={handleToggleManualMode}
+        onClearSession={clearSession}
         
         // Left Panel props
         automations={automations}
+        executionStatuses={allExecutionStatuses}
         onCreateAutomation={handleCreateAutomation}
         onRunAutomation={handleRunAutomation}
         onEditAutomation={handleEditAutomation}
         onDeleteAutomation={handleDeleteAutomation}
         onExtractVariables={handleExtractVariables}
-        onOpenVariableEditor={handleOpenVariableEditor}
+        onOpenVariableEditor={handleOpenVariableInput}
+        onPauseExecution={handlePauseExecutionFromPanel}
+        onResumeExecution={handleResumeExecutionFromPanel}
+        onStopExecution={handleStopExecutionFromPanel}
       
-      // Center Panel props
-      url={url}
-      screenshotSrc={screenshotSrc}
-      isLoading={isLoading}
-      isManualMode={isManualMode}
-      isPaused={isPaused}
-      onNavigate={handleNavigate}
-      onGoBack={handleGoBack}
-      onRefresh={handleRefresh}
-      onToggleManualMode={handleToggleManualMode}
-      onTogglePause={handleTogglePause}
-      onSync={handleSync}
-      onPageInfo={handlePageInfo}
-      onScreenshotClick={handleScreenshotClick}
-      
-      // Right Panel props
-      messages={messages}
-      isRecording={isRecording}
-      onSendMessage={handleSendMessage}
-      onToggleRecording={handleToggleRecording}
-      websocket={ws}
-      selectedAutomationId={selectedAutomation?.id}
+        // Center Panel props
+        url={url}
+        screenshotSrc={screenshotSrc}
+        isLoading={isLoading}
+        isPaused={isPaused}
+        onNavigate={handleNavigate}
+        onGoBack={handleGoBack}
+        onRefresh={handleRefresh}
+        onTogglePause={handleTogglePause}
+        onSync={handleSync}
+        onPageInfo={handlePageInfo}
+        onScreenshotClick={handleScreenshotClick}
+        
+        // Right Panel props
+        messages={messages}
+        onSendMessage={handleSendMessage}
+        websocket={ws}
+        selectedAutomationId={selectedAutomation?.id}
       />
 
       {/* Variable Editor Modal */}
       <VariableEditorModal
         isOpen={isVariableModalOpen}
         automation={selectedAutomation}
-        variables={automationVariables}
         onClose={handleCloseVariableEditor}
         onSave={handleSaveVariables}
+      />
+
+      {/* Variable Input Modal */}
+      <VariableInputModal
+        isOpen={isVariableInputModalOpen}
+        automation={variableInputAutomation}
+        onClose={handleCloseVariableInput}
+        onSubmit={handleSubmitVariableInput}
+      />
+
+      {/* Execution Status Display */}
+      <ExecutionStatusDisplay
+        isVisible={isExecutionStatusVisible}
+        executionStatus={currentExecutionStatus}
+        logs={executionLogs}
+        onClose={handleCloseExecutionStatus}
+        onPause={handlePauseExecution}
+        onResume={handleResumeExecution}
+        onStop={handleStopExecution}
+        onRetry={handleRetryExecution}
       />
     </>
   );

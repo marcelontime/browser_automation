@@ -47,6 +47,9 @@ screenshots/*.png
 screenshots/*.jpg
 temp/
 
+# Generated Playwright scripts
+generated_scripts/
+
 # OS generated files
 .DS_Store
 .DS_Store?

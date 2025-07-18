@@ -77,23 +77,37 @@ const InfoItem = styled.div`
 `;
 
 interface HeaderProps {
-  connectionStatus?: 'connected' | 'connecting' | 'disconnected';
+  connectionStatus: 'connected' | 'connecting' | 'disconnected';
+  isRecording: boolean;
+  isManualMode: boolean;
+  onToggleRecording: () => void;
+  onToggleManualMode: () => void;
+  onClearSession?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({ 
-  connectionStatus = 'connected'
+  connectionStatus, 
+  isRecording, 
+  isManualMode, 
+  onToggleRecording, 
+  onToggleManualMode,
+  onClearSession
 }) => {
-  const getStatusText = () => {
+  const getStatusIcon = () => {
     switch (connectionStatus) {
-      case 'connected': return 'Connected';
-      case 'connecting': return 'Connecting...';
-      case 'disconnected': return 'Disconnected';
-      default: return 'Unknown';
+      case 'connected': return '🟢';
+      case 'connecting': return '🟡';
+      case 'disconnected': return '🔴';
     }
   };
 
-  const getEngineInfo = () => {
-    return 'Stagehand v2.0 + Timeout Protection';
+  const getCurrentSessionId = () => {
+    return localStorage.getItem('browser_automation_session_id');
+  };
+
+  const formatSessionId = (sessionId: string | null) => {
+    if (!sessionId) return 'No session';
+    return sessionId.length > 12 ? `${sessionId.substring(0, 12)}...` : sessionId;
   };
 
   return (
@@ -106,13 +120,13 @@ const Header: React.FC<HeaderProps> = ({
       <StatusSection>
         <ConnectionStatus>
           <StatusDot connected={connectionStatus === 'connected'} />
-          {getStatusText()}
+          <span className="status-text">{connectionStatus}</span>
         </ConnectionStatus>
         
         <SystemInfo>
           <InfoItem>
             <span>🎯</span>
-            <span>{getEngineInfo()}</span>
+            <span>Stagehand v2.0 + Timeout Protection</span>
           </InfoItem>
           <InfoItem>
             <span>⚡</span>
@@ -120,6 +134,37 @@ const Header: React.FC<HeaderProps> = ({
           </InfoItem>
         </SystemInfo>
       </StatusSection>
+
+      <div className="header-right">
+        <button 
+          className={`button ${isRecording ? 'button-danger' : 'button-primary'}`}
+          onClick={onToggleRecording}
+          title={isRecording ? 'Stop recording' : 'Start recording'}
+        >
+          {isRecording ? '⏹️ Stop' : '🔴 Record'}
+        </button>
+        
+        <button 
+          className={`button ${isManualMode ? 'button-primary' : 'button-secondary'}`}
+          onClick={onToggleManualMode}
+          title={isManualMode ? 'Switch to automatic mode' : 'Switch to manual mode'}
+        >
+          {isManualMode ? '🤖 Auto' : '👤 Manual'}
+        </button>
+
+        <div className="session-info">
+          <span className="session-id">📝 {formatSessionId(getCurrentSessionId())}</span>
+          {onClearSession && (
+            <button 
+              className="button button-ghost button-sm"
+              onClick={onClearSession}
+              title="Start new session"
+            >
+              🔄 New Session
+            </button>
+          )}
+        </div>
+      </div>
     </HeaderContainer>
   );
 };

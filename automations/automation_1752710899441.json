@@ -1,0 +1,42 @@
+{
+  "id": "automation_1752710899441",
+  "name": "navigation goal - User wants to navigate to the website x.com",
+  "description": "LLM-generated automation for User wants to navigate to the website x.com",
+  "type": "navigation_goal",
+  "steps": [
+    {
+      "id": "step_zslmxbonp",
+      "name": "Navigate to the specified URL x.com and wait for the page to load until the DOM content is fully loaded.",
+      "action": "goto",
+      "target": "http://x.com",
+      "value": "",
+      "type": "navigation"
+    }
+  ],
+  "variables": [
+    {
+      "name": "url_0",
+      "value": "http://x.com",
+      "type": "url",
+      "source": "llm_extraction"
+    }
+  ],
+  "metadata": {
+    "createdAt": 1752710899441,
+    "sessionId": "1752710878806_a1mi2b7mx",
+    "goalType": "navigation_goal",
+    "confidence": 0.95,
+    "llmGenerated": true,
+    "extractedData": {
+      "urls": [
+        "http://x.com"
+      ],
+      "credentials": {},
+      "formData": {},
+      "selectors": [],
+      "searchTerms": [],
+      "files": [],
+      "waitConditions": []
+    }
+  }
+}

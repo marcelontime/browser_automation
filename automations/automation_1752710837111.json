@@ -1,0 +1,42 @@
+{
+  "id": "automation_1752710837111",
+  "name": "navigation goal - User wants to navigate to the website aikolab.akadseguros.com.br",
+  "description": "LLM-generated automation for User wants to navigate to the website aikolab.akadseguros.com.br",
+  "type": "navigation_goal",
+  "steps": [
+    {
+      "id": "step_g66r2a69y",
+      "name": "Navigate to the website aikolab.akadseguros.com.br",
+      "action": "goto",
+      "target": "https://aikolab.akadseguros.com.br",
+      "value": "",
+      "type": "navigation"
+    }
+  ],
+  "variables": [
+    {
+      "name": "url_0",
+      "value": "https://aikolab.akadseguros.com.br",
+      "type": "url",
+      "source": "llm_extraction"
+    }
+  ],
+  "metadata": {
+    "createdAt": 1752710837111,
+    "sessionId": "1752710797126_fxrcj0f4l",
+    "goalType": "navigation_goal",
+    "confidence": 0.95,
+    "llmGenerated": true,
+    "extractedData": {
+      "urls": [
+        "https://aikolab.akadseguros.com.br"
+      ],
+      "credentials": {},
+      "formData": {},
+      "selectors": [],
+      "searchTerms": [],
+      "files": [],
+      "waitConditions": []
+    }
+  }
+}

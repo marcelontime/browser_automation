@@ -104,160 +104,103 @@ interface Message {
   timestamp: Date;
 }
 
-interface LayoutProps {
+export interface LayoutProps {
   // Header props
-  connectionStatus?: 'connected' | 'connecting' | 'disconnected';
-  
-  // Left Panel props
-  automations: Automation[];
+  connectionStatus: 'connected' | 'connecting' | 'disconnected';
   isRecording: boolean;
+  isManualMode: boolean;
+  onToggleRecording: () => void;
+  onToggleManualMode: () => void;
+  onClearSession?: () => void;
+  
+  // Left panel props
+  automations: Automation[];
+  executionStatuses?: any[]; // ExecutionStatus array
   onCreateAutomation: () => void;
-  onRunAutomation: (automationId: string) => void;
+  onRunAutomation: (automationId: string, variables?: Record<string, string>) => void;
   onEditAutomation: (automationId: string) => void;
   onDeleteAutomation: (automationId: string) => void;
   onExtractVariables: (automationId: string) => void;
   onOpenVariableEditor: (automation: Automation) => void;
-  
-  // Center Panel props
+  onPauseExecution?: (executionId: string) => void;
+  onResumeExecution?: (executionId: string) => void;
+  onStopExecution?: (executionId: string) => void;
+
+  // Center panel props
   url: string;
   screenshotSrc: string;
   isLoading: boolean;
-  isManualMode: boolean;
   isPaused: boolean;
   onNavigate: (url: string) => void;
   onGoBack: () => void;
   onRefresh: () => void;
-  onToggleManualMode: () => void;
   onTogglePause: () => void;
   onSync: () => void;
   onPageInfo: () => void;
-  onScreenshotClick?: (x: number, y: number) => void;
-  
-  // Right Panel props
+  onScreenshotClick: (x: number, y: number) => void;
+
+  // Right panel props
   messages: Message[];
   onSendMessage: (message: string) => void;
-  onToggleRecording: () => void;
-  websocket?: WebSocket | null;
+  websocket: WebSocket | null;
   selectedAutomationId?: string;
 }
 
-const Layout: React.FC<LayoutProps> = ({
-  // Header props
-  connectionStatus = 'connected',
-  
-  // Left Panel props
-  automations,
-  isRecording,
-  onCreateAutomation,
-  onRunAutomation,
-  onEditAutomation,
-  onDeleteAutomation,
-  onExtractVariables,
-  onOpenVariableEditor,
-  
-  // Center Panel props
-  url,
-  screenshotSrc,
-  isLoading,
-  isManualMode,
-  isPaused,
-  onNavigate,
-  onGoBack,
-  onRefresh,
-  onToggleManualMode,
-  onTogglePause,
-  onSync,
-  onPageInfo,
-  onScreenshotClick,
-  
-  // Right Panel props
-  messages,
-  onSendMessage,
-  onToggleRecording,
-  websocket,
-  selectedAutomationId
-}) => {
-  const [isLeftPanelOpen, setIsLeftPanelOpen] = React.useState(false);
-  const [isRightPanelOpen, setIsRightPanelOpen] = React.useState(false);
-
-  const toggleLeftPanel = () => {
-    setIsLeftPanelOpen(!isLeftPanelOpen);
-    if (isRightPanelOpen) setIsRightPanelOpen(false);
-  };
-
-  const toggleRightPanel = () => {
-    setIsRightPanelOpen(!isRightPanelOpen);
-    if (isLeftPanelOpen) setIsLeftPanelOpen(false);
-  };
-
-  const closePanels = () => {
-    setIsLeftPanelOpen(false);
-    setIsRightPanelOpen(false);
-  };
-
-      return (
-      <LayoutContainer>
-        <Header 
-          connectionStatus={connectionStatus}
+const Layout: React.FC<LayoutProps> = (props) => {
+  return (
+    <LayoutContainer>
+      <Header 
+        connectionStatus={props.connectionStatus}
+        isRecording={props.isRecording}
+        isManualMode={props.isManualMode}
+        onToggleRecording={props.onToggleRecording}
+        onToggleManualMode={props.onToggleManualMode}
+        onClearSession={props.onClearSession}
+      />
+      
+      <MainContent>
+        <LeftPanel
+          automations={props.automations}
+          isRecording={props.isRecording}
+          executionStatuses={props.executionStatuses}
+          onCreateAutomation={props.onCreateAutomation}
+          onRunAutomation={props.onRunAutomation}
+          onEditAutomation={props.onEditAutomation}
+          onDeleteAutomation={props.onDeleteAutomation}
+          onExtractVariables={props.onExtractVariables}
+          onOpenVariableEditor={props.onOpenVariableEditor}
+          onPauseExecution={props.onPauseExecution}
+          onResumeExecution={props.onResumeExecution}
+          onStopExecution={props.onStopExecution}
         />
         
-        <MainContent>
-          <LeftPanel 
-            automations={automations}
-            isRecording={isRecording}
-            onCreateAutomation={onCreateAutomation}
-            onRunAutomation={onRunAutomation}
-            onEditAutomation={onEditAutomation}
-            onDeleteAutomation={onDeleteAutomation}
-            onExtractVariables={onExtractVariables}
-            onOpenVariableEditor={onOpenVariableEditor}
-            isOpen={isLeftPanelOpen}
-          />
-          
-          <CenterPanel 
-            url={url}
-            screenshotSrc={screenshotSrc}
-            isLoading={isLoading}
-            isManualMode={isManualMode}
-            isPaused={isPaused}
-            onNavigate={onNavigate}
-            onGoBack={onGoBack}
-            onRefresh={onRefresh}
-            onToggleManualMode={onToggleManualMode}
-            onTogglePause={onTogglePause}
-            onSync={onSync}
-            onPageInfo={onPageInfo}
-            onScreenshotClick={onScreenshotClick}
-          />
-          
-          <RightPanel 
-            messages={messages}
-            isRecording={isRecording}
-            onSendMessage={onSendMessage}
-            onToggleRecording={onToggleRecording}
-            isOpen={isRightPanelOpen}
-            automationCount={automations.length}
-            hasVariables={automations.some(a => a.variableCount && a.variableCount > 0)}
-            websocket={websocket}
-            selectedAutomationId={selectedAutomationId}
-          />
-        </MainContent>
-        
-        {/* Mobile Controls */}
-        <MobileMenuButton onClick={toggleLeftPanel}>
-          📋
-        </MobileMenuButton>
-        
-        <MobileChatButton onClick={toggleRightPanel}>
-          💬
-        </MobileChatButton>
-        
-        <MobileOverlay 
-          isVisible={isLeftPanelOpen || isRightPanelOpen}
-          onClick={closePanels}
+        <CenterPanel
+          url={props.url}
+          screenshotSrc={props.screenshotSrc}
+          isLoading={props.isLoading}
+          isManualMode={props.isManualMode}
+          isPaused={props.isPaused}
+          onNavigate={props.onNavigate}
+          onGoBack={props.onGoBack}
+          onRefresh={props.onRefresh}
+          onToggleManualMode={props.onToggleManualMode}
+          onTogglePause={props.onTogglePause}
+          onSync={props.onSync}
+          onPageInfo={props.onPageInfo}
+          onScreenshotClick={props.onScreenshotClick}
         />
-      </LayoutContainer>
-    );
+        
+        <RightPanel
+          messages={props.messages}
+          isRecording={props.isRecording}
+          onSendMessage={props.onSendMessage}
+          onToggleRecording={props.onToggleRecording}
+          websocket={props.websocket}
+          selectedAutomationId={props.selectedAutomationId}
+        />
+      </MainContent>
+    </LayoutContainer>
+  );
 };
 
 export default Layout; 

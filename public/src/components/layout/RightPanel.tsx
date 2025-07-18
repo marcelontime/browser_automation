@@ -1,8 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import styled from 'styled-components';
 import { Button } from '../ui/Button';
-import { Badge } from '../ui/Badge';
-import AnalyticsDashboard from '../automation/AnalyticsDashboard';
 
 const PanelContainer = styled.aside`
   width: 450px;
@@ -25,59 +23,6 @@ const PanelContainer = styled.aside`
       right: 0;
     }
   }
-`;
-
-const AssistantHeader = styled.div`
-  padding: var(--space-6);
-  border-bottom: 1px solid var(--neutral-200);
-  background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-500) 100%);
-  color: white;
-`;
-
-const AssistantTitle = styled.h3`
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  margin-bottom: var(--space-2);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-`;
-
-const AssistantSubtitle = styled.p`
-  font-size: var(--text-sm);
-  opacity: 0.9;
-  margin: 0;
-`;
-
-const TabsContainer = styled.div`
-  display: flex;
-  border-bottom: 1px solid var(--neutral-200);
-  background: white;
-`;
-
-const Tab = styled.button<{ active: boolean }>`
-  flex: 1;
-  padding: var(--space-3) var(--space-4);
-  border: none;
-  background: ${props => props.active ? 'var(--primary-50)' : 'transparent'};
-  color: ${props => props.active ? 'var(--primary-600)' : 'var(--neutral-600)'};
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  border-bottom: 2px solid ${props => props.active ? 'var(--primary-500)' : 'transparent'};
-  
-  &:hover {
-    background: ${props => props.active ? 'var(--primary-50)' : 'var(--neutral-50)'};
-    color: ${props => props.active ? 'var(--primary-600)' : 'var(--neutral-700)'};
-  }
-`;
-
-const TabContent = styled.div`
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
 `;
 
 const RecordingSection = styled.div`
@@ -201,36 +146,6 @@ const ChatInput = styled.textarea`
   }
 `;
 
-const ExamplesSection = styled.div`
-  padding: var(--space-4);
-  border-top: 1px solid var(--neutral-100);
-  background: var(--neutral-50);
-`;
-
-const ExampleButton = styled.button`
-  width: 100%;
-  padding: var(--space-3);
-  background: white;
-  border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-  color: var(--neutral-600);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  margin-bottom: var(--space-2);
-  text-align: left;
-  
-  &:hover {
-    border-color: var(--primary-300);
-    background: var(--primary-50);
-    color: var(--primary-700);
-  }
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
-`;
-
 const RecordingIndicator = styled.div<{ isRecording: boolean }>`
   display: flex;
   align-items: center;
@@ -283,12 +198,10 @@ const RightPanel: React.FC<RightPanelProps> = ({
   automationCount = 0,
   hasVariables = false,
   websocket = null,
-  selectedAutomationId
+  selectedAutomationId = undefined
 }) => {
   const [currentMessage, setCurrentMessage] = React.useState('');
-  const [activeTab, setActiveTab] = useState<'chat' | 'analytics'>('chat');
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
-  const inputRef = React.useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -312,154 +225,53 @@ const RightPanel: React.FC<RightPanelProps> = ({
     }
   };
 
-  const handleExampleClick = (example: string) => {
-    setCurrentMessage(example);
-    inputRef.current?.focus();
-  };
-
-  // Dynamic examples based on context
-  const getContextualExamples = () => {
-    if (isRecording) {
-      return [
-        "Click on the login button",
-        "Type user@example.com in the email field",
-        "Select Brazil from the country dropdown",
-        "Fill in the password field",
-        "Navigate to checkout page"
-      ];
-    } else if (hasVariables) {
-      return [
-        "${LOGIN_EMAIL} john@example.com ${LOGIN_PASSWORD} myPass123",
-        "${CPF} 123.456.789-00 ${PHONE} (11) 98765-4321",
-        "${SEARCH_TERM} laptop ${MAX_PRICE} 5000",
-        "${URL} https://example.com/login",
-        "${USERNAME} johndoe ${EMAIL} john@email.com"
-      ];
-    } else if (automationCount > 0) {
-      return [
-        "Run my login automation",
-        "Extract variables from the last recording",
-        "Show me all automations",
-        "Delete the test automation",
-        "Edit automation steps"
-      ];
-    } else {
-      return [
-        "Navigate to google.com",
-        "Create a new automation",
-        "Start recording my actions",
-        "Take a screenshot",
-        "Help me automate a login"
-      ];
-    }
-  };
-
-  const examples = getContextualExamples();
-
   return (
     <PanelContainer className={isOpen ? 'open' : ''}>
-      <AssistantHeader>
-        <AssistantTitle>
-          🤖 AI Assistant
-        </AssistantTitle>
-        <AssistantSubtitle>
-          Teach me through natural commands!
-        </AssistantSubtitle>
-      </AssistantHeader>
-
-      <TabsContainer>
-        <Tab 
-          active={activeTab === 'chat'} 
-          onClick={() => setActiveTab('chat')}
+      <RecordingSection>
+        <RecordingIndicator isRecording={isRecording}>
+          <RecordingDot isRecording={isRecording} />
+          {isRecording ? 'Recording actions...' : 'Ready to record'}
+        </RecordingIndicator>
+        <Button
+          variant={isRecording ? "error" : "primary"}
+          size="sm"
+          onClick={onToggleRecording}
+          style={{ marginTop: 'var(--space-3)', width: '100%' }}
         >
-          💬 Chat
-        </Tab>
-        <Tab 
-          active={activeTab === 'analytics'} 
-          onClick={() => setActiveTab('analytics')}
-        >
-          📊 Analytics
-        </Tab>
-      </TabsContainer>
+          {isRecording ? '⏹️ Stop Recording' : '🔴 Start Recording'}
+        </Button>
+      </RecordingSection>
 
-      <TabContent>
-        {activeTab === 'chat' ? (
-          <>
-            <RecordingSection>
-              <RecordingIndicator isRecording={isRecording}>
-                <RecordingDot isRecording={isRecording} />
-                {isRecording ? 'Recording actions...' : 'Ready to record'}
-              </RecordingIndicator>
-              <Button
-                variant={isRecording ? "error" : "primary"}
-                size="sm"
-                onClick={onToggleRecording}
-                style={{ marginTop: 'var(--space-3)', width: '100%' }}
-              >
-                {isRecording ? '⏹️ Stop Recording' : '🔴 Start Recording'}
-              </Button>
-            </RecordingSection>
+      <ChatContainer>
+        <ChatMessages>
+          {messages.map((message) => (
+            <Message key={message.id} type={message.type}>
+              {message.text}
+            </Message>
+          ))}
+          <div ref={messagesEndRef} />
+        </ChatMessages>
 
-            <ChatContainer>
-              <ChatMessages>
-                {messages.map((message) => (
-                  <Message key={message.id} type={message.type}>
-                    {message.text}
-                  </Message>
-                ))}
-                <div ref={messagesEndRef} />
-              </ChatMessages>
-
-              <ChatInputContainer>
-                <ChatInputWrapper>
-                  <ChatInput
-                    ref={inputRef}
-                    value={currentMessage}
-                    onChange={(e) => setCurrentMessage(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder="Type your instruction..."
-                    rows={1}
-                  />
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleSendMessage}
-                    disabled={!currentMessage.trim()}
-                  >
-                    Send
-                  </Button>
-                </ChatInputWrapper>
-              </ChatInputContainer>
-            </ChatContainer>
-
-            <ExamplesSection>
-              <div style={{ 
-                fontSize: 'var(--text-xs)', 
-                fontWeight: 'var(--font-medium)', 
-                color: 'var(--neutral-600)',
-                marginBottom: 'var(--space-2)'
-              }}>
-                💡 Try these examples:
-              </div>
-              {examples.map((example, index) => (
-                <ExampleButton
-                  key={index}
-                  onClick={() => handleExampleClick(example)}
-                >
-                  {example}
-                </ExampleButton>
-              ))}
-            </ExamplesSection>
-          </>
-        ) : (
-          <div style={{ padding: 'var(--space-4)', height: '100%', overflow: 'auto' }}>
-            <AnalyticsDashboard 
-              websocket={websocket} 
-              automationId={selectedAutomationId}
+        <ChatInputContainer>
+          <ChatInputWrapper>
+            <ChatInput
+              value={currentMessage}
+              onChange={(e) => setCurrentMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Type your message..."
+              rows={2}
             />
-          </div>
-        )}
-      </TabContent>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSendMessage}
+              disabled={!currentMessage.trim()}
+            >
+              Send
+            </Button>
+          </ChatInputWrapper>
+        </ChatInputContainer>
+      </ChatContainer>
     </PanelContainer>
   );
 };

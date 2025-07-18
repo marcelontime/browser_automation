@@ -1,0 +1,66 @@
+{
+  "id": "automation_1752711748526",
+  "name": "navigation goal - User wants to navigate to google.com",
+  "description": "LLM-generated automation for User wants to navigate to google.com",
+  "type": "navigation_goal",
+  "steps": [
+    {
+      "id": "step_v5y004kta",
+      "name": "Open the first website to search for laptops",
+      "action": "goto",
+      "target": "https://www.example1.com",
+      "value": "",
+      "type": "navigation"
+    },
+    {
+      "id": "step_hqrvy93c1",
+      "name": "Type 'laptop' into the search field",
+      "action": "fill",
+      "target": "#search-input",
+      "value": "laptop",
+      "type": "input"
+    },
+    {
+      "id": "step_q6txs7pa9",
+      "name": "Submit the search query",
+      "action": "press",
+      "target": "#search-input",
+      "value": "Enter",
+      "type": "interaction"
+    },
+    {
+      "id": "step_dpclvfp2c",
+      "name": "Navigate to Google homepage",
+      "action": "goto",
+      "target": "https://www.google.com",
+      "value": "",
+      "type": "navigation"
+    }
+  ],
+  "variables": [
+    {
+      "name": "url_0",
+      "value": "https://www.google.com",
+      "type": "url",
+      "source": "llm_extraction"
+    }
+  ],
+  "metadata": {
+    "createdAt": 1752711748526,
+    "sessionId": "1752711647244_wf769znhu",
+    "goalType": "navigation_goal",
+    "confidence": 0.95,
+    "llmGenerated": true,
+    "extractedData": {
+      "urls": [
+        "https://www.google.com"
+      ],
+      "credentials": {},
+      "formData": {},
+      "selectors": [],
+      "searchTerms": [],
+      "files": [],
+      "waitConditions": []
+    }
+  }
+}

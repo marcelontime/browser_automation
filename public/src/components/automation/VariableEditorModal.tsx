@@ -17,54 +17,51 @@ const ModalOverlay = styled.div`
 
 const ModalContainer = styled.div`
   background: white;
-  border-radius: var(--radius-xl);
+  border-radius: 12px;
   width: 90%;
-  max-width: 800px;
-  max-height: 90vh;
+  max-width: 600px;
+  max-height: 80vh;
   overflow: hidden;
-  box-shadow: 
-    0 25px 50px -12px rgba(0, 0, 0, 0.25),
-    0 0 0 1px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
 `;
 
 const ModalHeader = styled.div`
-  padding: var(--space-6);
-  border-bottom: 1px solid var(--neutral-200);
+  padding: 24px 24px 16px 24px;
+  border-bottom: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--neutral-50);
+  background: #f8fafc;
 `;
 
 const ModalTitle = styled.h2`
   margin: 0;
-  font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
-  color: var(--neutral-800);
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: 8px;
 `;
 
 const CloseButton = styled.button`
   background: none;
   border: none;
-  font-size: var(--text-xl);
-  color: var(--neutral-500);
+  font-size: 24px;
+  color: #6b7280;
   cursor: pointer;
-  padding: var(--space-2);
-  border-radius: var(--radius-md);
+  padding: 4px;
+  border-radius: 4px;
   
   &:hover {
-    background: var(--neutral-200);
-    color: var(--neutral-700);
+    background: #e5e7eb;
   }
 `;
 
 const ModalBody = styled.div`
-  padding: var(--space-6);
+  padding: 24px;
   overflow-y: auto;
   flex: 1;
 `;
@@ -72,184 +69,169 @@ const ModalBody = styled.div`
 const VariableList = styled.div`
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 16px;
 `;
 
 const VariableCard = styled.div`
-  border: 1px solid var(--neutral-300);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  background: var(--neutral-50);
-  transition: all var(--transition-fast);
-  
-  &:hover {
-    border-color: var(--primary-400);
-    background: white;
-  }
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  position: relative;
 `;
 
 const VariableHeader = styled.div`
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-3);
+  justify-content: between;
+  margin-bottom: 12px;
 `;
 
-const VariableType = styled.span`
-  background: var(--primary-100);
-  color: var(--primary-700);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  text-transform: uppercase;
+const VariableIcon = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
 `;
 
-const DeleteVariableButton = styled.button`
-  background: var(--red-100);
-  color: var(--red-600);
+const DeleteButton = styled.button`
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: #fee2e2;
+  color: #dc2626;
   border: none;
-  padding: var(--space-2);
-  border-radius: var(--radius-md);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
   cursor: pointer;
   
   &:hover {
-    background: var(--red-200);
+    background: #fecaca;
   }
 `;
 
-const VariableForm = styled.div`
+const FormRow = styled.div`
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
-  
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const FormGroup = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  grid-template-columns: 1fr 2fr;
+  gap: 16px;
+  align-items: center;
 `;
 
 const Label = styled.label`
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  color: var(--neutral-700);
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
 `;
 
 const Input = styled.input`
-  padding: var(--space-3);
-  border: 1px solid var(--neutral-300);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  transition: all var(--transition-fast);
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.2s;
   
   &:focus {
     outline: none;
-    border-color: var(--primary-500);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 1px #3b82f6;
   }
-`;
-
-const Select = styled.select`
-  padding: var(--space-3);
-  border: 1px solid var(--neutral-300);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  background: white;
-  transition: all var(--transition-fast);
-  
-  &:focus {
-    outline: none;
-    border-color: var(--primary-500);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-  }
-`;
-
-const ExampleValue = styled.div`
-  background: var(--neutral-100);
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  font-family: var(--font-family-mono);
-  font-size: var(--text-sm);
-  color: var(--neutral-600);
-  border: 1px solid var(--neutral-200);
 `;
 
 const AddVariableButton = styled.button`
-  background: var(--primary-100);
-  color: var(--primary-700);
-  border: 1px dashed var(--primary-300);
-  padding: var(--space-4);
-  border-radius: var(--radius-lg);
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 12px 16px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  transition: all var(--transition-fast);
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background-color 0.2s;
   
   &:hover {
-    background: var(--primary-200);
-    border-color: var(--primary-400);
+    background: #2563eb;
   }
 `;
 
 const ModalFooter = styled.div`
-  padding: var(--space-6);
-  border-top: 1px solid var(--neutral-200);
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
   display: flex;
-  gap: var(--space-3);
+  gap: 12px;
   justify-content: flex-end;
-  background: var(--neutral-50);
+  background: #f8fafc;
 `;
 
 const Button = styled.button<{ variant?: 'primary' | 'secondary' }>`
-  padding: var(--space-3) var(--space-5);
-  border-radius: var(--radius-lg);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.2s;
   border: 1px solid;
   
   ${props => props.variant === 'primary' ? `
-    background: var(--primary-600);
+    background: #3b82f6;
     color: white;
-    border-color: var(--primary-600);
+    border-color: #3b82f6;
     
     &:hover {
-      background: var(--primary-700);
-      border-color: var(--primary-700);
+      background: #2563eb;
+      border-color: #2563eb;
     }
   ` : `
     background: white;
-    color: var(--neutral-700);
-    border-color: var(--neutral-300);
+    color: #374151;
+    border-color: #d1d5db;
     
     &:hover {
-      background: var(--neutral-50);
-      border-color: var(--neutral-400);
+      background: #f9fafb;
     }
   `}
+`;
+
+const EmptyState = styled.div`
+  text-align: center;
+  padding: 40px 20px;
+  color: #6b7280;
+  
+  .icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+  
+  h3 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    font-weight: 500;
+    color: #374151;
+  }
+  
+  p {
+    margin: 0;
+    font-size: 14px;
+  }
 `;
 
 interface Variable {
   id: string;
   name: string;
-  type: 'email' | 'password' | 'text' | 'url' | 'number' | 'phone' | 'cpf';
-  originalValue: string;
-  currentValue: string;
-  description?: string;
-  validation?: string;
-  required: boolean;
+  value: string;
+  type?: string;
 }
 
 interface VariableEditorModalProps {
   isOpen: boolean;
   automation: any;
-  variables: Variable[];
   onClose: () => void;
   onSave: (variables: Variable[]) => void;
 }
@@ -257,21 +239,34 @@ interface VariableEditorModalProps {
 const VariableEditorModal: React.FC<VariableEditorModalProps> = ({
   isOpen,
   automation,
-  variables: initialVariables,
   onClose,
   onSave
 }) => {
-  const [variables, setVariables] = useState<Variable[]>(initialVariables);
+  const [variables, setVariables] = useState<Variable[]>([]);
 
   useEffect(() => {
-    setVariables(initialVariables);
-  }, [initialVariables]);
+    if (isOpen && automation) {
+      // Load variables from automation
+      const loadedVariables = automation.variables || [];
+      console.log('📋 Loading variables for editing:', loadedVariables);
+      
+      // Convert to simple format
+      const simpleVariables = loadedVariables.map((v: any, index: number) => ({
+        id: v.id || `var_${index}`,
+        name: v.name || `Variable ${index + 1}`,
+        value: v.value || v.currentValue || v.originalValue || '',
+        type: v.type || 'text'
+      }));
+      
+      setVariables(simpleVariables);
+    }
+  }, [isOpen, automation]);
 
   if (!isOpen) return null;
 
-  const handleVariableChange = (id: string, field: keyof Variable, value: string | boolean) => {
+  const handleVariableChange = (id: string, field: 'name' | 'value', newValue: string) => {
     setVariables(prev => prev.map(variable => 
-      variable.id === id ? { ...variable, [field]: value } : variable
+      variable.id === id ? { ...variable, [field]: newValue } : variable
     ));
   };
 
@@ -281,32 +276,29 @@ const VariableEditorModal: React.FC<VariableEditorModalProps> = ({
 
   const handleAddVariable = () => {
     const newVariable: Variable = {
-      id: Date.now().toString(),
-      name: `VAR_${variables.length + 1}`,
-      type: 'text',
-      originalValue: '',
-      currentValue: '',
-      required: false
+      id: `var_${Date.now()}`,
+      name: `Variable ${variables.length + 1}`,
+      value: '',
+      type: 'text'
     };
     setVariables(prev => [...prev, newVariable]);
   };
 
   const handleSave = () => {
+    console.log('💾 Saving variables:', variables);
     onSave(variables);
     onClose();
   };
 
-  const getFieldTypeIcon = (type: string) => {
-    const icons = {
-      email: '📧',
-      password: '🔒',
-      text: '📝',
-      url: '🔗',
-      number: '🔢',
-      phone: '📞',
-      cpf: '🆔'
-    };
-    return icons[type as keyof typeof icons] || '📝';
+  const getVariableIcon = (type?: string) => {
+    switch (type) {
+      case 'url': return '🔗';
+      case 'cpf': return '🆔';
+      case 'password': return '🔒';
+      case 'email': return '📧';
+      case 'phone': return '📱';
+      default: return '🔧';
+    }
   };
 
   return (
@@ -320,20 +312,27 @@ const VariableEditorModal: React.FC<VariableEditorModalProps> = ({
         </ModalHeader>
 
         <ModalBody>
-          <VariableList>
-            {variables.map((variable) => (
-              <VariableCard key={variable.id}>
-                <VariableHeader>
-                  <VariableType>
-                    {getFieldTypeIcon(variable.type)} {variable.type}
-                  </VariableType>
-                  <DeleteVariableButton onClick={() => handleDeleteVariable(variable.id)}>
+          {variables.length === 0 ? (
+            <EmptyState>
+              <div className="icon">🔧</div>
+              <h3>No Variables Found</h3>
+              <p>This automation doesn't have any variables yet. Add one below to get started.</p>
+            </EmptyState>
+          ) : (
+            <VariableList>
+              {variables.map((variable) => (
+                <VariableCard key={variable.id}>
+                  <DeleteButton onClick={() => handleDeleteVariable(variable.id)}>
                     🗑️
-                  </DeleteVariableButton>
-                </VariableHeader>
+                  </DeleteButton>
+                  
+                  <VariableHeader>
+                    <VariableIcon>
+                      {getVariableIcon(variable.type)} {variable.type || 'text'}
+                    </VariableIcon>
+                  </VariableHeader>
 
-                <VariableForm>
-                  <FormGroup>
+                  <FormRow>
                     <Label>Variable Name</Label>
                     <Input
                       type="text"
@@ -341,69 +340,25 @@ const VariableEditorModal: React.FC<VariableEditorModalProps> = ({
                       onChange={(e) => handleVariableChange(variable.id, 'name', e.target.value)}
                       placeholder="Enter variable name"
                     />
-                  </FormGroup>
+                  </FormRow>
 
-                  <FormGroup>
-                    <Label>Field Type</Label>
-                    <Select
-                      value={variable.type}
-                      onChange={(e) => handleVariableChange(variable.id, 'type', e.target.value)}
-                    >
-                      <option value="text">Text</option>
-                      <option value="email">Email</option>
-                      <option value="password">Password</option>
-                      <option value="url">URL</option>
-                      <option value="number">Number</option>
-                      <option value="phone">Phone</option>
-                      <option value="cpf">CPF</option>
-                    </Select>
-                  </FormGroup>
-
-                  <FormGroup>
-                    <Label>Current Value</Label>
+                  <FormRow style={{ marginTop: '12px' }}>
+                    <Label>Value</Label>
                     <Input
                       type={variable.type === 'password' ? 'password' : 'text'}
-                      value={variable.currentValue}
-                      onChange={(e) => handleVariableChange(variable.id, 'currentValue', e.target.value)}
-                      placeholder="Enter new value"
+                      value={variable.value}
+                      onChange={(e) => handleVariableChange(variable.id, 'value', e.target.value)}
+                      placeholder="Enter variable value"
                     />
-                  </FormGroup>
+                  </FormRow>
+                </VariableCard>
+              ))}
 
-                  <FormGroup>
-                    <Label>Original Recorded Value</Label>
-                    <ExampleValue>
-                      {variable.originalValue || 'No recorded value'}
-                    </ExampleValue>
-                  </FormGroup>
-
-                  <FormGroup style={{ gridColumn: '1 / -1' }}>
-                    <Label>Description (Optional)</Label>
-                    <Input
-                      type="text"
-                      value={variable.description || ''}
-                      onChange={(e) => handleVariableChange(variable.id, 'description', e.target.value)}
-                      placeholder="Describe what this variable is used for"
-                    />
-                  </FormGroup>
-
-                  <FormGroup style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                      <input
-                        type="checkbox"
-                        checked={variable.required}
-                        onChange={(e) => handleVariableChange(variable.id, 'required', e.target.checked)}
-                      />
-                      <span>Required field</span>
-                    </label>
-                  </FormGroup>
-                </VariableForm>
-              </VariableCard>
-            ))}
-
-            <AddVariableButton onClick={handleAddVariable}>
-              ➕ Add New Variable
-            </AddVariableButton>
-          </VariableList>
+              <AddVariableButton onClick={handleAddVariable}>
+                ➕ Add New Variable
+              </AddVariableButton>
+            </VariableList>
+          )}
         </ModalBody>
 
         <ModalFooter>

@@ -1,0 +1,42 @@
+{
+  "id": "automation_1752711911269",
+  "name": "navigation goal - User wants to navigate to the Google homepage.",
+  "description": "LLM-generated automation for User wants to navigate to the Google homepage.",
+  "type": "navigation_goal",
+  "steps": [
+    {
+      "id": "step_diudauq6y",
+      "name": "Navigate to the Google homepage using the URL https://www.google.com.",
+      "action": "goto",
+      "target": "https://www.google.com",
+      "value": "",
+      "type": "navigation"
+    }
+  ],
+  "variables": [
+    {
+      "name": "url_0",
+      "value": "https://www.google.com",
+      "type": "url",
+      "source": "llm_extraction"
+    }
+  ],
+  "metadata": {
+    "createdAt": 1752711911269,
+    "sessionId": "1752711896932_ld1hzkln8",
+    "goalType": "navigation_goal",
+    "confidence": 1,
+    "llmGenerated": true,
+    "extractedData": {
+      "urls": [
+        "https://www.google.com"
+      ],
+      "credentials": {},
+      "formData": {},
+      "selectors": [],
+      "searchTerms": [],
+      "files": [],
+      "waitConditions": []
+    }
+  }
+}
