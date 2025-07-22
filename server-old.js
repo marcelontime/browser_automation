@@ -228,7 +228,7 @@ class IntelligentBrowserAutomation {
         });
 
         this.page = await this.browser.newPage();
-        await this.page.setViewportSize({ width: 1400, height: 900 });
+        await this.page.setViewportSize({ width: 1920, height: 1080 });
         
         // Navigate to a default page
         await this.page.goto('https://www.google.com', { waitUntil: 'networkidle' });

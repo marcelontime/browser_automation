@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test:*)",
+      "Bash(node comprehensive_test.js)",
+      "Bash(node:*)",
+      "Bash(npm start)",
+      "Bash(taskkill:*)",
+      "Bash(rmdir:*)",
+      "Bash(npm install)",
+      "Bash(grep:*)",
+      "Bash(npm run test:browser:*)",
+      "Bash(curl:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run:*)",
+      "Bash(tasklist:*)"
+    ],
+    "deny": []
+  }
+}

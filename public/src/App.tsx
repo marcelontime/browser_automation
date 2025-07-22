@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Layout from './components/layout/Layout';
 import VariableEditorModal from './components/automation/VariableEditorModal';
 import VariableInputModal from './components/automation/VariableInputModal';
 import ExecutionStatusDisplay from './components/automation/ExecutionStatusDisplay';
+import { ModernDashboard } from './components/dashboard/ModernDashboard';
+import { ThemeProvider } from './components/ui/theme-provider';
+
+// Import global styles
+import './styles/global.css';
 
 interface Automation {
   id: string;
@@ -12,6 +17,11 @@ interface Automation {
   description?: string;
   variableCount?: number;
   stepCount?: number;
+  variables?: any[]; // Use any[] to avoid interface conflicts - each component will handle its own Variable interface
+  steps?: any[]; // Add steps property that server sends
+  createdAt?: string;
+  playwrightScript?: string;
+  scriptFilename?: string;
 }
 
 interface Message {
@@ -49,6 +59,9 @@ interface ExecutionLog {
 type MessageType = 'user' | 'bot' | 'system' | 'error';
 
 const App: React.FC = () => {
+  // UI state
+  const [useModernDashboard, setUseModernDashboard] = useState(true);
+  
   // Connection state
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [ws, setWs] = useState<WebSocket | null>(null);
@@ -70,7 +83,6 @@ const App: React.FC = () => {
   // Variable Editor Modal state
   const [isVariableModalOpen, setIsVariableModalOpen] = useState(false);
   const [selectedAutomation, setSelectedAutomation] = useState<Automation | null>(null);
-  const [automationVariables, setAutomationVariables] = useState<any[]>([]);
 
   // Variable Input Modal state (for editing variables before running)
   const [isVariableInputModalOpen, setIsVariableInputModalOpen] = useState(false);
@@ -162,24 +174,12 @@ const App: React.FC = () => {
     return () => {
       if (ws) ws.close();
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array - only run once on mount
 
-  const getExampleValue = (type: string): string => {
-    const examples: Record<string, string> = {
-      'email': 'user@example.com',
-      'password': 'myPassword123',
-      'cpf': '123.456.789-00',
-      'phone': '(11) 98765-4321',
-      'date': '2024-01-15',
-      'number': '100',
-      'url': 'https://example.com',
-      'text': 'example text',
-      'select': 'option1'
-    };
-    return examples[type] || 'value';
-  };
 
-  const handleMessage = (data: any) => {
+
+  const handleMessage = useCallback((data: any) => {
     switch (data.type) {
       case 'status':
         // Store session ID for future connections
@@ -291,11 +291,44 @@ const App: React.FC = () => {
         break;
 
       case 'execution_progress':
+        if (data.executionId) {
+          setCurrentExecutionStatus(prev => {
+            // If no previous state OR executionId matches, update
+            if (!prev || prev.executionId === data.executionId) {
+              return {
+                executionId: data.executionId,
+                automationId: data.automationId || prev?.automationId || 'unknown',
+                currentStep: data.currentStep,
+                progress: data.progress,
+                status: data.status || 'running',
+                totalSteps: data.totalSteps || prev?.totalSteps || 5,
+                startTime: prev?.startTime || new Date().toISOString(),
+                successfulSteps: prev?.successfulSteps || 0,
+                errorCount: prev?.errorCount || 0,
+                metadata: prev?.metadata || { automationName: 'Unknown', hasVariables: false }
+              };
+            }
+            return prev; // Different executionId, don't update
+          });
+        }
+        
+        // Update in all execution statuses for left panel
+        setAllExecutionStatuses(prev => 
+          prev.map(status => 
+            status.executionId === data.executionId 
+              ? { ...status, currentStep: data.currentStep, progress: data.progress, status: data.status }
+              : status
+          )
+        );
+        break;
+
+      case 'execution_total_steps_updated':
         if (data.executionId && currentExecutionStatus?.executionId === data.executionId) {
           setCurrentExecutionStatus(prev => {
             if (!prev) return null;
             return {
               ...prev,
+              totalSteps: data.totalSteps,
               currentStep: data.currentStep,
               progress: data.progress,
               status: data.status
@@ -307,7 +340,7 @@ const App: React.FC = () => {
         setAllExecutionStatuses(prev => 
           prev.map(status => 
             status.executionId === data.executionId 
-              ? { ...status, currentStep: data.currentStep, progress: data.progress, status: data.status }
+              ? { ...status, totalSteps: data.totalSteps, currentStep: data.currentStep, progress: data.progress, status: data.status }
               : status
           )
         );
@@ -330,6 +363,12 @@ const App: React.FC = () => {
               duration: data.duration
             };
           });
+          
+          // ✅ AUTO-CLOSE: Automatically close execution status display after completion
+          setTimeout(() => {
+            setIsExecutionStatusVisible(false);
+            setCurrentExecutionStatus(null);
+          }, 3000); // Close after 3 seconds to allow user to see completion
         }
         break;
 
@@ -345,6 +384,12 @@ const App: React.FC = () => {
               errorCount: (prev.errorCount || 0) + 1
             };
           });
+          
+          // ✅ AUTO-CLOSE: Automatically close execution status display after failure
+          setTimeout(() => {
+            setIsExecutionStatusVisible(false);
+            setCurrentExecutionStatus(null);
+          }, 5000); // Close after 5 seconds for failures to allow user to see error
         }
         break;
 
@@ -358,6 +403,15 @@ const App: React.FC = () => {
             };
           });
         }
+        
+        // ✅ CRITICAL FIX: Update allExecutionStatuses for LeftPanel button rendering
+        setAllExecutionStatuses(prev => 
+          prev.map(status => 
+            status.executionId === data.executionId 
+              ? { ...status, status: 'paused' }
+              : status
+          )
+        );
         break;
 
       case 'execution_resumed':
@@ -370,6 +424,15 @@ const App: React.FC = () => {
             };
           });
         }
+        
+        // ✅ CRITICAL FIX: Update allExecutionStatuses for LeftPanel button rendering
+        setAllExecutionStatuses(prev => 
+          prev.map(status => 
+            status.executionId === data.executionId 
+              ? { ...status, status: 'running' }
+              : status
+          )
+        );
         break;
 
       case 'execution_stopped':
@@ -382,7 +445,18 @@ const App: React.FC = () => {
               endTime: data.endTime || new Date().toISOString()
             };
           });
+          
+          // ✅ AUTO-CLOSE: Automatically close execution status display after stop
+          setTimeout(() => {
+            setIsExecutionStatusVisible(false);
+            setCurrentExecutionStatus(null);
+          }, 2000); // Close after 2 seconds for stopped executions
         }
+        
+        // ✅ CRITICAL FIX: Update allExecutionStatuses and remove completed execution
+        setAllExecutionStatuses(prev => 
+          prev.filter(status => status.executionId !== data.executionId)
+        );
         break;
 
       case 'automation_stopped':
@@ -409,7 +483,7 @@ const App: React.FC = () => {
 
       case 'automation_variables':
         if (data.variables) {
-          setAutomationVariables(data.variables);
+          // setAutomationVariables(data.variables); // This state variable was removed
         }
         break;
 
@@ -425,6 +499,12 @@ const App: React.FC = () => {
               ? { ...a, status: 'ready' as const, lastRun: new Date() } 
               : a
           ));
+          
+          // ✅ AUTO-CLOSE: Automatically close execution status display after automation completion
+          setTimeout(() => {
+            setIsExecutionStatusVisible(false);
+            setCurrentExecutionStatus(null);
+          }, 3000); // Close after 3 seconds to allow user to see completion
         }
         addMessage(data.message, 'system');
         break;
@@ -456,6 +536,33 @@ const App: React.FC = () => {
       case 'manual_mode_disabled':
         setIsManualMode(false);
         addMessage(data.message, 'system');
+        break;
+
+      // Enhanced manual mode handlers
+      case 'enhanced_manual_mode_enabled':
+        setIsManualMode(true);
+        addMessage(data.message, 'system');
+        break;
+
+      case 'enhanced_manual_mode_disabled':
+        setIsManualMode(false);
+        addMessage(data.message, 'system');
+        break;
+
+      // Real-time control messages
+      case 'real_time_control_started':
+        console.log('🎮 Real-time control started with capabilities:', data.capabilities);
+        break;
+
+      case 'real_time_control_stopped':
+        console.log('🛑 Real-time control stopped');
+        break;
+
+      case 'real_time_screenshot':
+        if (data.data) {
+          const imageUrl = `data:image/jpeg;base64,${data.data}`;
+          setScreenshotSrc(imageUrl);
+        }
         break;
 
       case 'automation_paused':
@@ -506,7 +613,8 @@ const App: React.FC = () => {
         }
         break;
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // sendCommand and currentExecutionStatus are stable and don't cause infinite re-renders
 
   const addMessage = (text: string, type: MessageType) => {
     const newMessage: Message = {
@@ -531,10 +639,7 @@ const App: React.FC = () => {
     window.location.reload();
   };
 
-  // Get current session ID
-  const getCurrentSessionId = () => {
-    return localStorage.getItem('browser_automation_session_id');
-  };
+
 
   // Event handlers
   const handleNavigate = (newUrl: string) => {
@@ -575,6 +680,39 @@ const App: React.FC = () => {
       type: 'manual_click', 
       x: x, 
       y: y 
+    });
+  };
+
+  // Enhanced mouse event handler for real-time controls
+  const handleEnhancedMouseEvent = (event: any) => {
+    if (!isManualMode) return;
+    
+    console.log('Enhanced mouse event:', event);
+    sendCommand({
+      type: 'enhanced_mouse_event',
+      ...event
+    });
+  };
+
+  // Enhanced keyboard event handler for real-time controls
+  const handleEnhancedKeyboardEvent = (event: any) => {
+    if (!isManualMode) return;
+    
+    console.log('Enhanced keyboard event:', event);
+    sendCommand({
+      type: 'enhanced_keyboard_event',
+      ...event
+    });
+  };
+
+  // Touch event handler for mobile gestures
+  const handleTouchEvent = (event: any) => {
+    if (!isManualMode) return;
+    
+    console.log('Touch event:', event);
+    sendCommand({
+      type: 'touch_event',
+      ...event
     });
   };
 
@@ -672,13 +810,7 @@ const App: React.FC = () => {
     }
   };
 
-  // Add refresh function
-  const refreshAutomations = () => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      console.log('🔄 Refreshing automations from server...');
-      ws.send(JSON.stringify({ type: 'get_automations' }));
-    }
-  };
+
 
   const handleDeleteAutomation = (automationId: string) => {
     const automation = automations.find(a => a.id === automationId);
@@ -701,25 +833,13 @@ const App: React.FC = () => {
     }
   };
 
-  // Variable Editor Modal handlers (for advanced editing)
-  const handleOpenVariableEditor = async (automation: Automation) => {
-    setSelectedAutomation(automation);
-    
-    // Get existing variables for this automation
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ 
-        type: 'get_automation_variables', 
-        automationId: automation.id 
-      }));
-    }
-    
-    setIsVariableModalOpen(true);
-  };
 
-  // Variable Input Modal handlers (for quick editing before running)
-  const handleOpenVariableInput = async (automation: Automation) => {
-    setVariableInputAutomation(automation);
-    setIsVariableInputModalOpen(true);
+
+  // Variable Editor Modal handlers (for editing automation variables)
+  const handleOpenVariableEditor = async (automation: Automation) => {
+    console.log('🔧 Opening Variable Editor for automation:', automation.id);
+    setSelectedAutomation(automation);
+    setIsVariableModalOpen(true);
   };
 
   const handleCloseVariableInput = () => {
@@ -737,7 +857,7 @@ const App: React.FC = () => {
   const handleCloseVariableEditor = () => {
     setIsVariableModalOpen(false);
     setSelectedAutomation(null);
-    setAutomationVariables([]);
+    // setAutomationVariables([]); // This state variable was removed
   };
 
   const handleSaveVariables = (variables: any[]) => {
@@ -826,48 +946,116 @@ const App: React.FC = () => {
   // (on connection, after creation/deletion/editing operations)
 
   return (
-    <>
-      <Layout
-        // Header props
-        connectionStatus={connectionStatus}
-        isRecording={isRecording}
-        isManualMode={isManualMode}
-        onToggleRecording={handleToggleRecording}
-        onToggleManualMode={handleToggleManualMode}
-        onClearSession={clearSession}
-        
-        // Left Panel props
-        automations={automations}
-        executionStatuses={allExecutionStatuses}
-        onCreateAutomation={handleCreateAutomation}
-        onRunAutomation={handleRunAutomation}
-        onEditAutomation={handleEditAutomation}
-        onDeleteAutomation={handleDeleteAutomation}
-        onExtractVariables={handleExtractVariables}
-        onOpenVariableEditor={handleOpenVariableInput}
-        onPauseExecution={handlePauseExecutionFromPanel}
-        onResumeExecution={handleResumeExecutionFromPanel}
-        onStopExecution={handleStopExecutionFromPanel}
-      
-        // Center Panel props
-        url={url}
-        screenshotSrc={screenshotSrc}
-        isLoading={isLoading}
-        isPaused={isPaused}
-        onNavigate={handleNavigate}
-        onGoBack={handleGoBack}
-        onRefresh={handleRefresh}
-        onTogglePause={handleTogglePause}
-        onSync={handleSync}
-        onPageInfo={handlePageInfo}
-        onScreenshotClick={handleScreenshotClick}
-        
-        // Right Panel props
-        messages={messages}
-        onSendMessage={handleSendMessage}
-        websocket={ws}
-        selectedAutomationId={selectedAutomation?.id}
-      />
+    <ThemeProvider>
+      {useModernDashboard ? (
+        <>
+          <ModernDashboard
+            automations={automations.map(automation => ({
+              ...automation,
+              successRate: 95 // Mock success rate for now
+            }))}
+            onCreateAutomation={handleCreateAutomation}
+            onRunAutomation={handleRunAutomation}
+            onEditAutomation={handleEditAutomation}
+            onDeleteAutomation={handleDeleteAutomation}
+            onToggleRecording={handleToggleRecording}
+            isRecording={isRecording}
+          />
+          
+          {/* Toggle button to switch back to old interface */}
+          <div style={{ 
+            position: 'fixed', 
+            bottom: '20px', 
+            right: '20px', 
+            zIndex: 1000 
+          }}>
+            <button
+              onClick={() => setUseModernDashboard(false)}
+              style={{
+                padding: '8px 16px',
+                background: 'var(--primary-600)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              Switch to Classic View
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <Layout
+            // Header props
+            connectionStatus={connectionStatus}
+            isRecording={isRecording}
+            isManualMode={isManualMode}
+            onToggleRecording={handleToggleRecording}
+            onToggleManualMode={handleToggleManualMode}
+            onClearSession={clearSession}
+            
+            // Left Panel props
+            automations={automations}
+            executionStatuses={allExecutionStatuses}
+            onCreateAutomation={handleCreateAutomation}
+            onRunAutomation={handleRunAutomation}
+            onEditAutomation={handleEditAutomation}
+            onDeleteAutomation={handleDeleteAutomation}
+            onExtractVariables={handleExtractVariables}
+            onOpenVariableEditor={handleOpenVariableEditor}
+            onPauseExecution={handlePauseExecutionFromPanel}
+            onResumeExecution={handleResumeExecutionFromPanel}
+            onStopExecution={handleStopExecutionFromPanel}
+          
+            // Center Panel props
+            url={url}
+            screenshotSrc={screenshotSrc}
+            isLoading={isLoading}
+            isPaused={isPaused}
+            onNavigate={handleNavigate}
+            onGoBack={handleGoBack}
+            onRefresh={handleRefresh}
+            onTogglePause={handleTogglePause}
+            onSync={handleSync}
+            onPageInfo={handlePageInfo}
+            onScreenshotClick={handleScreenshotClick}
+            onEnhancedMouseEvent={handleEnhancedMouseEvent}
+            onEnhancedKeyboardEvent={handleEnhancedKeyboardEvent}
+            onTouchEvent={handleTouchEvent}
+            
+            // Right Panel props
+            messages={messages}
+            onSendMessage={handleSendMessage}
+            websocket={ws}
+            selectedAutomationId={selectedAutomation?.id}
+          />
+          
+          {/* Toggle button to switch to modern interface */}
+          <div style={{ 
+            position: 'fixed', 
+            bottom: '20px', 
+            right: '20px', 
+            zIndex: 1000 
+          }}>
+            <button
+              onClick={() => setUseModernDashboard(true)}
+              style={{
+                padding: '8px 16px',
+                background: 'var(--primary-600)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              Switch to Modern View
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Variable Editor Modal */}
       <VariableEditorModal
@@ -896,7 +1084,7 @@ const App: React.FC = () => {
         onStop={handleStopExecution}
         onRetry={handleRetryExecution}
       />
-    </>
+    </ThemeProvider>
   );
 };
 

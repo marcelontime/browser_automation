@@ -1,7 +1,8 @@
 const EventEmitter = require('events');
+const AdaptiveTimingController = require('../execution/adaptive-timing-controller');
 
 /**
- * Timing controller for managing waits, timeouts, and synchronization
+ * Enhanced Timing controller with adaptive timing capabilities
  */
 class TimingController extends EventEmitter {
     constructor(options = {}) {
@@ -12,6 +13,7 @@ class TimingController extends EventEmitter {
             networkIdleTimeout: options.networkIdleTimeout || 2000,
             domStabilityTimeout: options.domStabilityTimeout || 1000,
             adaptiveTimeouts: options.adaptiveTimeouts !== false,
+            enableAdvancedAdaptive: options.enableAdvancedAdaptive !== false,
             ...options
         };
         
@@ -27,6 +29,24 @@ class TimingController extends EventEmitter {
             averageNetworkLatency: 100,
             recentLoadTimes: []
         };
+        
+        // Initialize advanced adaptive timing controller
+        if (this.options.enableAdvancedAdaptive) {
+            this.adaptiveController = new AdaptiveTimingController({
+                baseTimeout: this.options.defaultTimeout,
+                maxTimeout: this.options.pageLoadTimeout,
+                ...options.adaptive
+            });
+            
+            // Forward events from adaptive controller
+            this.adaptiveController.on('timeoutCalculated', (data) => {
+                this.emit('adaptiveTimeoutCalculated', data);
+            });
+            
+            this.adaptiveController.on('complexityAnalyzed', (data) => {
+                this.emit('pageComplexityAnalyzed', data);
+            });
+        }
     }
 
     /**
@@ -386,13 +406,24 @@ class TimingController extends EventEmitter {
     }
 
     /**
-     * Calculate adaptive timeout based on network conditions and performance
+     * Calculate adaptive timeout with advanced intelligence
      */
-    calculateAdaptiveTimeout(baseTimeout = null) {
+    async calculateAdaptiveTimeout(action, context = {}, baseTimeout = null) {
         if (!this.options.adaptiveTimeouts) {
             return baseTimeout || this.options.defaultTimeout;
         }
         
+        // Use advanced adaptive controller if available
+        if (this.options.enableAdvancedAdaptive && this.adaptiveController) {
+            try {
+                const result = await this.adaptiveController.calculateOptimalTimeout(action, context);
+                return result.timeout;
+            } catch (error) {
+                console.warn('Advanced adaptive timeout calculation failed, falling back to basic:', error.message);
+            }
+        }
+        
+        // Fallback to basic adaptive calculation
         const base = baseTimeout || this.options.defaultTimeout;
         let multiplier = 1;
         
@@ -412,6 +443,112 @@ class TimingController extends EventEmitter {
         }
         
         return Math.min(base * multiplier, base * 3); // Cap at 3x original timeout
+    }
+
+    /**
+     * Enhanced wait for element with adaptive timing
+     */
+    async waitForElementAdaptive(page, selector, action, context = {}) {
+        if (!this.adaptiveController) {
+            return this.waitForElement(page, selector, context);
+        }
+        
+        try {
+            // Calculate optimal timeout and strategy
+            const timingResult = await this.adaptiveController.calculateOptimalTimeout(action, {
+                ...context,
+                page
+            });
+            
+            const startTime = Date.now();
+            
+            this.emit('adaptiveElementWaitStart', {
+                selector,
+                timeout: timingResult.timeout,
+                strategy: timingResult.strategy,
+                factors: timingResult.factors
+            });
+            
+            // Execute wait with calculated strategy
+            let result;
+            switch (timingResult.strategy) {
+                case 'element-stable':
+                    await this.waitForElement(page, selector, { timeout: timingResult.timeout });
+                    await this.waitForElementStability(page, selector, 500);
+                    break;
+                    
+                case 'networkidle':
+                    await this.waitForElement(page, selector, { timeout: timingResult.timeout });
+                    await this.waitForNetworkIdle(page, 1000, 5000);
+                    break;
+                    
+                case 'domcontentloaded':
+                    await page.waitForLoadState('domcontentloaded', { timeout: timingResult.timeout });
+                    await this.waitForElement(page, selector, { timeout: timingResult.timeout / 2 });
+                    break;
+                    
+                default:
+                    await this.waitForElement(page, selector, { timeout: timingResult.timeout });
+            }
+            
+            const duration = Date.now() - startTime;
+            
+            // Record result for learning
+            this.adaptiveController.recordTimingResult(action, context, {
+                success: true,
+                duration,
+                strategy: timingResult.strategy
+            });
+            
+            this.emit('adaptiveElementWaitComplete', {
+                selector,
+                duration,
+                strategy: timingResult.strategy
+            });
+            
+            return {
+                success: true,
+                selector,
+                duration,
+                strategy: timingResult.strategy,
+                adaptive: true
+            };
+            
+        } catch (error) {
+            const duration = Date.now() - (context.startTime || Date.now());
+            
+            // Record failure for learning
+            if (this.adaptiveController) {
+                this.adaptiveController.recordTimingResult(action, context, {
+                    success: false,
+                    duration,
+                    error: error.message
+                });
+            }
+            
+            this.emit('adaptiveElementWaitFailed', {
+                selector,
+                duration,
+                error: error.message
+            });
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Check DOM stability with adaptive parameters
+     */
+    async checkDOMStabilityAdaptive(page, context = {}) {
+        if (this.adaptiveController) {
+            return this.adaptiveController.checkDOMStability(page, {
+                checkInterval: 100,
+                stabilityThreshold: 500,
+                maxChecks: 50
+            });
+        }
+        
+        return this.waitForDOMStability(page);
     }
 
     /**

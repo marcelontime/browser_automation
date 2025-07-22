@@ -1,0 +1,452 @@
+name: Foundation Testing Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  NODE_VERSION: '18'
+  COVERAGE_THRESHOLD: 90
+
+jobs:
+  # Unit and Integration Tests
+  unit-tests:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [16, 18, 20]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: |
+        npm ci
+        npm install --save-dev @testing-library/jest-dom @testing-library/react @testing-library/user-event jest-axe
+        
+    - name: Run unit tests
+      run: npm test -- --coverage --watchAll=false
+      
+    - name: Check coverage threshold
+      run: |
+        npm run test:coverage-check
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/lcov.info
+        flags: unittests
+        name: codecov-umbrella
+        
+    - name: Generate test report
+      run: npm run test:report
+      
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.node-version }}
+        path: |
+          coverage/
+          test-results/
+          
+  # Performance Tests
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run performance tests
+      run: npm run test:performance
+      
+    - name: Check performance thresholds
+      run: npm run test:performance-check
+      
+    - name: Upload performance results
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-results
+        path: performance-results/
+        
+  # Accessibility Tests
+  accessibility-tests:
+    name: Accessibility Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: |
+        npm ci
+        npm install --save-dev axe-core @axe-core/playwright
+        
+    - name: Run accessibility tests
+      run: npm run test:accessibility
+      
+    - name: Check WCAG compliance
+      run: npm run test:wcag-check
+      
+    - name: Upload accessibility results
+      uses: actions/upload-artifact@v3
+      with:
+        name: accessibility-results
+        path: accessibility-results/
+        
+  # Cross-Browser Tests
+  cross-browser-tests:
+    name: Cross-Browser Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    strategy:
+      matrix:
+        browser: [chromium, firefox, webkit]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Install Playwright browsers
+      run: npx playwright install ${{ matrix.browser }}
+      
+    - name: Run cross-browser tests
+      run: npm run test:browser -- --browser=${{ matrix.browser }}
+      
+    - name: Upload browser test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: browser-results-${{ matrix.browser }}
+        path: browser-results/
+        
+  # Visual Regression Tests
+  visual-regression-tests:
+    name: Visual Regression Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: |
+        npm ci
+        npm install --save-dev @storybook/test-runner chromatic
+        
+    - name: Build Storybook
+      run: npm run build-storybook
+      
+    - name: Run visual regression tests
+      run: npm run test:visual
+      env:
+        CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+        
+    - name: Upload visual test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: visual-results
+        path: visual-results/
+        
+  # Security Tests
+  security-tests:
+    name: Security Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run security audit
+      run: npm audit --audit-level=moderate
+      
+    - name: Run dependency check
+      run: |
+        npm install --save-dev audit-ci
+        npx audit-ci --moderate
+        
+    - name: Run SAST scan
+      uses: github/super-linter@v4
+      env:
+        DEFAULT_BRANCH: main
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        VALIDATE_JAVASCRIPT_ES: true
+        VALIDATE_TYPESCRIPT_ES: true
+        
+  # Code Quality Tests
+  code-quality:
+    name: Code Quality Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run ESLint
+      run: npm run lint
+      
+    - name: Run Prettier check
+      run: npm run format:check
+      
+    - name: Run TypeScript check
+      run: npm run type-check
+      
+    - name: Run complexity analysis
+      run: |
+        npm install --save-dev complexity-report
+        npm run complexity-check
+        
+  # Integration with External Services
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [unit-tests, performance-tests, accessibility-tests]
+    
+    services:
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+          
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Setup test environment
+      run: |
+        cp .env.example .env.test
+        npm run setup:test
+        
+    - name: Run integration tests
+      run: npm run test:integration
+      env:
+        REDIS_URL: redis://localhost:6379
+        NODE_ENV: test
+        
+    - name: Run API tests
+      run: npm run test:api
+      
+    - name: Upload integration results
+      uses: actions/upload-artifact@v3
+      with:
+        name: integration-results
+        path: integration-results/
+        
+  # Test Results Aggregation
+  test-results:
+    name: Aggregate Test Results
+    runs-on: ubuntu-latest
+    needs: [unit-tests, performance-tests, accessibility-tests, cross-browser-tests, visual-regression-tests, security-tests, code-quality, integration-tests]
+    if: always()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Generate comprehensive report
+      run: npm run test:report-aggregate
+      
+    - name: Upload comprehensive report
+      uses: actions/upload-artifact@v3
+      with:
+        name: comprehensive-test-report
+        path: comprehensive-report/
+        
+    - name: Comment PR with results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          
+          try {
+            const reportPath = path.join('comprehensive-report', 'summary.json');
+            const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+            
+            const comment = `
+            ## 🧪 Foundation Testing Results
+            
+            ### Summary
+            - **Unit Tests**: ${report.unitTests.passed}/${report.unitTests.total} passed (${Math.round(report.unitTests.successRate * 100)}%)
+            - **Performance Tests**: ${report.performance.passed}/${report.performance.total} passed
+            - **Accessibility Tests**: ${report.accessibility.passed}/${report.accessibility.total} passed (WCAG ${report.accessibility.level})
+            - **Cross-Browser Tests**: ${report.crossBrowser.passed}/${report.crossBrowser.total} passed
+            - **Security Tests**: ${report.security.status}
+            - **Code Quality**: ${report.codeQuality.status}
+            
+            ### Coverage
+            - **Statements**: ${report.coverage.statements}%
+            - **Branches**: ${report.coverage.branches}%
+            - **Functions**: ${report.coverage.functions}%
+            - **Lines**: ${report.coverage.lines}%
+            
+            ### Performance Metrics
+            - **UI Response Time**: ${report.performance.uiResponseTime}ms (threshold: ${report.performance.threshold}ms)
+            - **API Response Time**: ${report.performance.apiResponseTime}ms
+            - **Memory Usage**: ${report.performance.memoryUsage}MB
+            
+            ${report.recommendations.length > 0 ? `
+            ### Recommendations
+            ${report.recommendations.map(r => `- ${r}`).join('\n')}
+            ` : ''}
+            
+            [View Full Report](${report.reportUrl})
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+          } catch (error) {
+            console.error('Failed to post comment:', error);
+          }
+          
+    - name: Set status check
+      if: always()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          
+          try {
+            const reportPath = path.join('comprehensive-report', 'summary.json');
+            const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+            
+            const state = report.overallStatus === 'passed' ? 'success' : 'failure';
+            const description = `${report.totalPassed}/${report.totalTests} tests passed`;
+            
+            github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: state,
+              target_url: report.reportUrl,
+              description: description,
+              context: 'Foundation Testing Suite'
+            });
+          } catch (error) {
+            console.error('Failed to set status check:', error);
+          }
+
+  # Deployment Gate
+  deployment-gate:
+    name: Deployment Gate
+    runs-on: ubuntu-latest
+    needs: test-results
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Check test results
+      run: |
+        echo "All foundation tests passed. Ready for deployment."
+        
+    - name: Trigger deployment
+      if: success()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.actions.createWorkflowDispatch({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'deploy.yml',
+            ref: 'main'
+          });

@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require('uuid');
  * 🔍 VARIABLE ANALYZER
  * 
  * Intelligent analysis engine that processes recorded browser actions
- * to automatically detect and extract variables with pattern recognition
+ * to automatically detect and extract variables with AI-powered pattern recognition
  */
 class VariableAnalyzer {
     constructor(options = {}) {
@@ -13,6 +13,10 @@ class VariableAnalyzer {
             confidenceThreshold: options.confidenceThreshold || 0.7,
             enableAdvancedPatterns: options.enableAdvancedPatterns !== false,
             sensitiveDataDetection: options.sensitiveDataDetection !== false,
+            enableAISuggestions: options.enableAISuggestions !== false,
+            aiApiKey: options.aiApiKey || process.env.OPENAI_API_KEY,
+            enableDataTypeDetection: options.enableDataTypeDetection !== false,
+            enableVariablePreview: options.enableVariablePreview !== false,
             ...options
         };
         
@@ -24,6 +28,15 @@ class VariableAnalyzer {
         
         // Statistics for pattern learning
         this.patternStats = new Map();
+        
+        // AI-powered analysis components
+        this.aiAnalyzer = new AIVariableAnalyzer(this.options);
+        this.dataTypeDetector = new AdvancedDataTypeDetector();
+        this.variablePreviewGenerator = new VariablePreviewGenerator();
+        
+        // Advanced pattern recognition
+        this.advancedPatterns = this.initializeAdvancedPatterns();
+        this.contextualAnalyzer = new ContextualAnalyzer();
     }
 
     /**
@@ -449,6 +462,581 @@ class VariableAnalyzer {
         const stats = this.patternStats.get(type);
         stats.count++;
         stats.totalConfidence += confidence;
+    }
+
+    /**
+     * 🤖 AI-POWERED VARIABLE ANALYSIS
+     * Enhanced analysis with AI suggestions and advanced pattern recognition
+     */
+    async analyzeWithAI(actions) {
+        console.log(`🤖 Starting AI-powered variable analysis for ${actions.length} actions...`);
+        
+        const variableCandidates = [];
+        const processedValues = new Set();
+        
+        for (const action of actions) {
+            if (action.type === 'type' && action.value && action.value.trim()) {
+                // Standard pattern analysis
+                const standardCandidates = await this.analyzeInputValue(action);
+                
+                // AI-powered analysis
+                let aiCandidates = [];
+                if (this.options.enableAISuggestions) {
+                    aiCandidates = await this.aiAnalyzer.analyzeWithAI(action);
+                }
+                
+                // Advanced data type detection
+                let advancedCandidates = [];
+                if (this.options.enableDataTypeDetection) {
+                    advancedCandidates = await this.dataTypeDetector.detectAdvancedTypes(action);
+                }
+                
+                // Merge and deduplicate candidates
+                const allCandidates = [...standardCandidates, ...aiCandidates, ...advancedCandidates];
+                const mergedCandidates = this.mergeCandidates(allCandidates);
+                
+                // Filter and add to results
+                for (const candidate of mergedCandidates) {
+                    const valueKey = `${candidate.value}_${candidate.type}`;
+                    if (!processedValues.has(valueKey) && 
+                        candidate.confidence >= this.options.confidenceThreshold) {
+                        
+                        processedValues.add(valueKey);
+                        
+                        // Generate preview if enabled
+                        if (this.options.enableVariablePreview) {
+                            candidate.preview = await this.variablePreviewGenerator.generatePreview(candidate);
+                        }
+                        
+                        variableCandidates.push(candidate);
+                    }
+                }
+            }
+        }
+        
+        // Sort by confidence and AI score
+        variableCandidates.sort((a, b) => {
+            const scoreA = (a.confidence * 0.7) + ((a.aiScore || 0) * 0.3);
+            const scoreB = (b.confidence * 0.7) + ((b.aiScore || 0) * 0.3);
+            return scoreB - scoreA;
+        });
+        
+        console.log(`✅ AI analysis complete. Found ${variableCandidates.length} enhanced variable candidates`);
+        return variableCandidates;
+    }
+
+    /**
+     * Initialize advanced pattern recognition
+     */
+    initializeAdvancedPatterns() {
+        return {
+            // Complex date patterns
+            DATE_ADVANCED: {
+                patterns: [
+                    /^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}$/i,
+                    /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}$/i,
+                    /^\d{1,2}(st|nd|rd|th)\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}$/i,
+                    /^(Today|Tomorrow|Yesterday)$/i,
+                    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/
+                ],
+                confidence: 0.9,
+                type: VariableTypes.DATE
+            },
+            
+            // International phone numbers
+            PHONE_INTERNATIONAL: {
+                patterns: [
+                    /^\+\d{1,3}\s?\(\d{1,4}\)\s?\d{1,4}[-\s]?\d{1,4}[-\s]?\d{1,9}$/,
+                    /^\+\d{1,3}[-\s]?\d{1,4}[-\s]?\d{1,4}[-\s]?\d{1,9}$/,
+                    /^00\d{1,3}\s?\d{1,4}\s?\d{1,4}\s?\d{1,9}$/
+                ],
+                confidence: 0.88,
+                type: VariableTypes.PHONE
+            },
+            
+            // Advanced email patterns
+            EMAIL_ADVANCED: {
+                patterns: [
+                    /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/,
+                    /^.+@.+\..+$/
+                ],
+                confidence: 0.95,
+                type: VariableTypes.EMAIL
+            },
+            
+            // Credit card numbers
+            CREDIT_CARD: {
+                patterns: [
+                    /^\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}$/,
+                    /^\d{4}[-\s]?\d{6}[-\s]?\d{5}$/,
+                    /^\d{4}[-\s]?\d{6}[-\s]?\d{4}$/
+                ],
+                confidence: 0.92,
+                type: VariableTypes.SENSITIVE
+            },
+            
+            // Social Security Numbers
+            SSN: {
+                patterns: [
+                    /^\d{3}-\d{2}-\d{4}$/,
+                    /^\d{9}$/
+                ],
+                confidence: 0.95,
+                type: VariableTypes.SENSITIVE
+            },
+            
+            // Complex currency patterns
+            CURRENCY_ADVANCED: {
+                patterns: [
+                    /^[A-Z]{3}\s?\d{1,3}(,\d{3})*(\.\d{2})?$/,
+                    /^\d{1,3}(,\d{3})*(\.\d{2})?\s?[A-Z]{3}$/,
+                    /^[\$\€\£\¥\₹\₽\₩\₪]\s?\d{1,3}(,\d{3})*(\.\d{2})?$/
+                ],
+                confidence: 0.87,
+                type: VariableTypes.CURRENCY
+            },
+            
+            // IP Addresses
+            IP_ADDRESS: {
+                patterns: [
+                    /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/,
+                    /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/
+                ],
+                confidence: 0.93,
+                type: 'IP_ADDRESS'
+            },
+            
+            // Geographic coordinates
+            COORDINATES: {
+                patterns: [
+                    /^-?\d{1,3}\.\d+,\s?-?\d{1,3}\.\d+$/,
+                    /^\d{1,2}°\d{1,2}'\d{1,2}"\s?[NS],\s?\d{1,3}°\d{1,2}'\d{1,2}"\s?[EW]$/
+                ],
+                confidence: 0.85,
+                type: 'COORDINATES'
+            }
+        };
+    }
+
+    /**
+     * Merge candidate variables from different analysis methods
+     */
+    mergeCandidates(candidates) {
+        const merged = new Map();
+        
+        for (const candidate of candidates) {
+            const key = `${candidate.value}_${candidate.type}`;
+            
+            if (merged.has(key)) {
+                const existing = merged.get(key);
+                // Merge with higher confidence and additional metadata
+                existing.confidence = Math.max(existing.confidence, candidate.confidence);
+                existing.aiScore = Math.max(existing.aiScore || 0, candidate.aiScore || 0);
+                existing.sources = [...(existing.sources || []), ...(candidate.sources || [])];
+                existing.metadata = { ...existing.metadata, ...candidate.metadata };
+            } else {
+                merged.set(key, { ...candidate, sources: candidate.sources || ['pattern'] });
+            }
+        }
+        
+        return Array.from(merged.values());
+    }
+}
+
+/**
+ * 🤖 AI VARIABLE ANALYZER
+ * Uses OpenAI API for intelligent variable analysis and suggestions
+ */
+class AIVariableAnalyzer {
+    constructor(options = {}) {
+        this.options = options;
+        this.apiKey = options.aiApiKey;
+        this.enabled = this.apiKey && options.enableAISuggestions;
+    }
+
+    async analyzeWithAI(action) {
+        if (!this.enabled) return [];
+
+        try {
+            const prompt = this.buildAnalysisPrompt(action);
+            const response = await this.callOpenAI(prompt);
+            return this.parseAIResponse(response, action);
+        } catch (error) {
+            console.warn('⚠️ AI analysis failed:', error.message);
+            return [];
+        }
+    }
+
+    buildAnalysisPrompt(action) {
+        const { value, element } = action;
+        const context = element ? {
+            label: element.label || '',
+            placeholder: element.placeholder || '',
+            name: element.name || '',
+            type: element.type || '',
+            id: element.id || ''
+        } : {};
+
+        return `Analyze this user input for variable extraction:
+
+Value: "${value}"
+Element Context:
+- Label: "${context.label}"
+- Placeholder: "${context.placeholder}"
+- Name: "${context.name}"
+- Type: "${context.type}"
+- ID: "${context.id}"
+
+Please provide:
+1. Variable type (email, name, phone, date, url, number, currency, text, sensitive)
+2. Confidence score (0-1)
+3. Suggested variable name
+4. Data validation rules
+5. Whether this appears to be sensitive data
+6. Business context (authentication, registration, ecommerce, etc.)
+
+Respond in JSON format:
+{
+  "type": "variable_type",
+  "confidence": 0.85,
+  "variableName": "suggested_name",
+  "validation": {"minLength": 5, "pattern": "regex"},
+  "sensitive": false,
+  "businessContext": "context",
+  "reasoning": "explanation"
+}`;
+    }
+
+    async callOpenAI(prompt) {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${this.apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: 'gpt-3.5-turbo',
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'You are an expert at analyzing user input data for automation variable extraction. Provide accurate, structured analysis.'
+                    },
+                    {
+                        role: 'user',
+                        content: prompt
+                    }
+                ],
+                temperature: 0.3,
+                max_tokens: 500
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`OpenAI API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.choices[0].message.content;
+    }
+
+    parseAIResponse(response, action) {
+        try {
+            const analysis = JSON.parse(response);
+            
+            return [{
+                id: require('uuid').v4(),
+                name: analysis.variableName || 'ai_variable',
+                type: analysis.type || VariableTypes.TEXT,
+                value: action.value,
+                confidence: analysis.confidence || 0.5,
+                aiScore: analysis.confidence || 0.5,
+                element: action.element,
+                validation: analysis.validation || {},
+                sensitive: analysis.sensitive || false,
+                businessContext: analysis.businessContext || 'general',
+                reasoning: analysis.reasoning || '',
+                sources: ['ai'],
+                metadata: {
+                    aiGenerated: true,
+                    aiModel: 'gpt-3.5-turbo',
+                    timestamp: Date.now()
+                }
+            }];
+        } catch (error) {
+            console.warn('⚠️ Failed to parse AI response:', error.message);
+            return [];
+        }
+    }
+}
+
+/**
+ * 🔬 ADVANCED DATA TYPE DETECTOR
+ * Detects complex data types using advanced pattern matching
+ */
+class AdvancedDataTypeDetector {
+    constructor() {
+        this.complexPatterns = this.initializeComplexPatterns();
+    }
+
+    initializeComplexPatterns() {
+        return {
+            // Time patterns
+            TIME: {
+                patterns: [
+                    /^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?(\s?(AM|PM))?$/i,
+                    /^([01]?[0-9]|2[0-3])\.[0-5][0-9](\.[0-5][0-9])?$/
+                ],
+                confidence: 0.9
+            },
+            
+            // Color codes
+            COLOR: {
+                patterns: [
+                    /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/,
+                    /^rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)$/,
+                    /^rgba\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*[01]?\.?\d*\s*\)$/
+                ],
+                confidence: 0.95
+            },
+            
+            // File paths
+            FILE_PATH: {
+                patterns: [
+                    /^[a-zA-Z]:\\(?:[^\\/:*?"<>|\r\n]+\\)*[^\\/:*?"<>|\r\n]*$/,
+                    /^\/(?:[^\/\0]+\/)*[^\/\0]*$/,
+                    /^\.{1,2}\/(?:[^\/\0]+\/)*[^\/\0]*$/
+                ],
+                confidence: 0.85
+            },
+            
+            // Version numbers
+            VERSION: {
+                patterns: [
+                    /^\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?$/,
+                    /^v\d+\.\d+(\.\d+)?(-[a-zA-Z0-9]+)?$/
+                ],
+                confidence: 0.88
+            },
+            
+            // UUIDs
+            UUID: {
+                patterns: [
+                    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+                ],
+                confidence: 0.98
+            }
+        };
+    }
+
+    async detectAdvancedTypes(action) {
+        const candidates = [];
+        const { value } = action;
+
+        for (const [type, config] of Object.entries(this.complexPatterns)) {
+            for (const pattern of config.patterns) {
+                if (pattern.test(value)) {
+                    candidates.push({
+                        id: require('uuid').v4(),
+                        name: this.generateNameForType(type, action.element),
+                        type: type,
+                        value: value,
+                        confidence: config.confidence,
+                        element: action.element,
+                        sources: ['advanced-pattern'],
+                        metadata: {
+                            patternType: 'advanced',
+                            detectedPattern: pattern.toString()
+                        }
+                    });
+                }
+            }
+        }
+
+        return candidates;
+    }
+
+    generateNameForType(type, element) {
+        const typeNames = {
+            TIME: 'time',
+            COLOR: 'color',
+            FILE_PATH: 'file_path',
+            VERSION: 'version',
+            UUID: 'uuid'
+        };
+
+        const baseName = typeNames[type] || type.toLowerCase();
+        
+        if (element && element.name) {
+            return `${element.name}_${baseName}`;
+        }
+        
+        return baseName;
+    }
+}
+
+/**
+ * 👁️ VARIABLE PREVIEW GENERATOR
+ * Generates preview information for variables
+ */
+class VariablePreviewGenerator {
+    async generatePreview(candidate) {
+        return {
+            currentValue: candidate.value,
+            exampleValues: this.generateExampleValues(candidate),
+            validationPreview: this.generateValidationPreview(candidate),
+            usageHints: this.generateUsageHints(candidate),
+            confidenceIndicator: this.generateConfidenceIndicator(candidate.confidence)
+        };
+    }
+
+    generateExampleValues(candidate) {
+        const examples = [];
+        
+        switch (candidate.type) {
+            case VariableTypes.EMAIL:
+                examples.push('user@example.com', 'test.email@domain.org');
+                break;
+            case VariableTypes.PHONE:
+                examples.push('+1 (555) 123-4567', '555-987-6543');
+                break;
+            case VariableTypes.DATE:
+                examples.push('2024-12-25', '12/25/2024');
+                break;
+            case VariableTypes.NAME:
+                examples.push('John Smith', 'Maria Garcia');
+                break;
+            default:
+                examples.push('Example value 1', 'Example value 2');
+        }
+        
+        return examples;
+    }
+
+    generateValidationPreview(candidate) {
+        const validation = candidate.validation || {};
+        const preview = [];
+        
+        if (validation.pattern) {
+            preview.push(`Must match pattern: ${validation.pattern}`);
+        }
+        if (validation.minLength) {
+            preview.push(`Minimum length: ${validation.minLength}`);
+        }
+        if (validation.maxLength) {
+            preview.push(`Maximum length: ${validation.maxLength}`);
+        }
+        
+        return preview;
+    }
+
+    generateUsageHints(candidate) {
+        const hints = [];
+        
+        if (candidate.sensitive) {
+            hints.push('🔒 This appears to be sensitive data');
+        }
+        if (candidate.aiScore > 0.8) {
+            hints.push('🤖 AI-recommended with high confidence');
+        }
+        if (candidate.businessContext) {
+            hints.push(`📋 Context: ${candidate.businessContext}`);
+        }
+        
+        return hints;
+    }
+
+    generateConfidenceIndicator(confidence) {
+        if (confidence >= 0.9) return { level: 'high', color: 'green', text: 'High confidence' };
+        if (confidence >= 0.7) return { level: 'medium', color: 'yellow', text: 'Medium confidence' };
+        return { level: 'low', color: 'red', text: 'Low confidence' };
+    }
+}
+
+/**
+ * 🧠 CONTEXTUAL ANALYZER
+ * Analyzes element context for better variable detection
+ */
+class ContextualAnalyzer {
+    analyzeContext(element, surroundingElements = []) {
+        const context = {
+            formContext: this.analyzeFormContext(element),
+            pageContext: this.analyzePageContext(),
+            elementContext: this.analyzeElementContext(element),
+            surroundingContext: this.analyzeSurroundingElements(surroundingElements)
+        };
+        
+        return context;
+    }
+
+    analyzeFormContext(element) {
+        if (!element || !element.form) return null;
+        
+        return {
+            formName: element.form.name || element.form.id || '',
+            formAction: element.form.action || '',
+            formMethod: element.form.method || 'GET',
+            fieldPosition: Array.from(element.form.elements).indexOf(element) + 1,
+            totalFields: element.form.elements.length,
+            formPurpose: this.inferFormPurpose(element.form)
+        };
+    }
+
+    analyzePageContext() {
+        if (typeof window === 'undefined') return null;
+        
+        return {
+            title: document.title || '',
+            url: window.location.href || '',
+            domain: window.location.hostname || '',
+            pagePurpose: this.inferPagePurpose()
+        };
+    }
+
+    analyzeElementContext(element) {
+        if (!element) return null;
+        
+        return {
+            hasLabel: !!(element.label || element.labels?.length),
+            hasPlaceholder: !!element.placeholder,
+            isRequired: element.required || false,
+            isDisabled: element.disabled || false,
+            hasValidation: !!(element.pattern || element.min || element.max),
+            inputType: element.type || 'text'
+        };
+    }
+
+    analyzeSurroundingElements(elements) {
+        return elements.map(el => ({
+            tagName: el.tagName,
+            textContent: el.textContent?.substring(0, 50) || '',
+            distance: el.distance || 0
+        }));
+    }
+
+    inferFormPurpose(form) {
+        const formText = (form.name + ' ' + form.id + ' ' + form.action).toLowerCase();
+        
+        if (/login|signin|auth/.test(formText)) return 'authentication';
+        if (/register|signup|create/.test(formText)) return 'registration';
+        if (/contact|support/.test(formText)) return 'contact';
+        if (/checkout|payment|billing/.test(formText)) return 'ecommerce';
+        if (/search/.test(formText)) return 'search';
+        
+        return 'general';
+    }
+
+    inferPagePurpose() {
+        if (typeof document === 'undefined') return 'unknown';
+        
+        const pageText = (document.title + ' ' + window.location.href).toLowerCase();
+        
+        if (/login|signin|auth/.test(pageText)) return 'authentication';
+        if (/register|signup|create/.test(pageText)) return 'registration';
+        if (/profile|account|settings/.test(pageText)) return 'user-management';
+        if (/checkout|cart|payment/.test(pageText)) return 'ecommerce';
+        if (/contact|support|help/.test(pageText)) return 'customer-service';
+        
+        return 'general';
     }
 }
 

@@ -93,13 +93,7 @@ const Header: React.FC<HeaderProps> = ({
   onToggleManualMode,
   onClearSession
 }) => {
-  const getStatusIcon = () => {
-    switch (connectionStatus) {
-      case 'connected': return '🟢';
-      case 'connecting': return '🟡';
-      case 'disconnected': return '🔴';
-    }
-  };
+
 
   const getCurrentSessionId = () => {
     return localStorage.getItem('browser_automation_session_id');

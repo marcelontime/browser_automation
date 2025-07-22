@@ -2,7 +2,7 @@ import React from 'react';
 import styled from 'styled-components';
 import Header from './Header';
 import LeftPanel from './LeftPanel';
-import CenterPanel from './CenterPanel';
+import EnhancedCenterPanel from './EnhancedCenterPanel';
 import RightPanel from './RightPanel';
 
 const LayoutContainer = styled.div`
@@ -22,70 +22,11 @@ const MainContent = styled.div`
   overflow: hidden;
 `;
 
-const MobileOverlay = styled.div<{ isVisible: boolean }>`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: var(--z-modal-backdrop);
-  opacity: ${props => props.isVisible ? 1 : 0};
-  visibility: ${props => props.isVisible ? 'visible' : 'hidden'};
-  transition: all var(--transition-normal);
-  
-  @media (min-width: 1024px) {
-    display: none;
-  }
-`;
 
-const MobileMenuButton = styled.button`
-  position: fixed;
-  top: 20px;
-  left: 20px;
-  z-index: var(--z-fixed);
-  background: var(--primary-600);
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  padding: var(--space-2);
-  cursor: pointer;
-  box-shadow: var(--shadow-lg);
-  transition: all var(--transition-fast);
-  
-  &:hover {
-    background: var(--primary-700);
-    transform: translateY(-1px);
-  }
-  
-  @media (min-width: 768px) {
-    display: none;
-  }
-`;
 
-const MobileChatButton = styled.button`
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: var(--z-fixed);
-  background: var(--primary-600);
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  padding: var(--space-2);
-  cursor: pointer;
-  box-shadow: var(--shadow-lg);
-  transition: all var(--transition-fast);
-  
-  &:hover {
-    background: var(--primary-700);
-    transform: translateY(-1px);
-  }
-  
-  @media (min-width: 1024px) {
-    display: none;
-  }
-`;
+
+
+
 
 interface Automation {
   id: string;
@@ -138,6 +79,9 @@ export interface LayoutProps {
   onSync: () => void;
   onPageInfo: () => void;
   onScreenshotClick: (x: number, y: number) => void;
+  onEnhancedMouseEvent?: (event: any) => void;
+  onEnhancedKeyboardEvent?: (event: any) => void;
+  onTouchEvent?: (event: any) => void;
 
   // Right panel props
   messages: Message[];
@@ -174,7 +118,7 @@ const Layout: React.FC<LayoutProps> = (props) => {
           onStopExecution={props.onStopExecution}
         />
         
-        <CenterPanel
+        <EnhancedCenterPanel
           url={props.url}
           screenshotSrc={props.screenshotSrc}
           isLoading={props.isLoading}
@@ -188,6 +132,10 @@ const Layout: React.FC<LayoutProps> = (props) => {
           onSync={props.onSync}
           onPageInfo={props.onPageInfo}
           onScreenshotClick={props.onScreenshotClick}
+          onEnhancedMouseEvent={props.onEnhancedMouseEvent}
+          onEnhancedKeyboardEvent={props.onEnhancedKeyboardEvent}
+          onTouchEvent={props.onTouchEvent}
+          websocket={props.websocket}
         />
         
         <RightPanel

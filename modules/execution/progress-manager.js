@@ -150,6 +150,38 @@ class ExecutionProgressManager extends EventEmitter {
     }
 
     /**
+     * Update total steps for an execution (when initial navigation is added)
+     */
+    updateTotalSteps(executionId, newTotalSteps) {
+        const context = this.activeExecutions.get(executionId);
+        if (!context) {
+            console.warn(`⚠️ Execution context not found: ${executionId}`);
+            return false;
+        }
+        
+        console.log(`📊 Updating total steps for ${executionId}: ${context.totalSteps} → ${newTotalSteps}`);
+        context.totalSteps = newTotalSteps;
+        
+        // Recalculate progress with new total
+        const progress = context.totalSteps > 0 ? 
+            Math.round((context.currentStep / context.totalSteps) * 100) : 0;
+        
+        // Broadcast updated context
+        this.broadcastUpdate({
+            type: 'execution_total_steps_updated',
+            executionId,
+            automationId: context.automationId,
+            sessionId: context.sessionId,
+            totalSteps: newTotalSteps,
+            currentStep: context.currentStep,
+            progress,
+            status: context.status
+        });
+        
+        return true;
+    }
+
+    /**
      * Add execution log entry
      */
     addLog(executionId, logEntry) {
@@ -467,16 +499,19 @@ class ExecutionProgressManager extends EventEmitter {
             status: context.status,
             currentStep: context.currentStep,
             totalSteps: context.totalSteps,
-            progress: context.totalSteps > 0 ? 
+            progress: context.totalSteps > 0 && context.currentStep > 0 ? 
                 Math.round((context.currentStep / context.totalSteps) * 100) : 0,
-            startTime: context.startTime,
-            endTime: context.endTime,
+            startTime: context.startTime.toISOString(),
+            endTime: context.endTime ? context.endTime.toISOString() : undefined,
             duration: context.duration,
             successfulSteps: context.results.filter(r => r.success !== false).length,
             errorCount: context.errors.length,
-            metadata: context.metadata,
-            // Don't include sensitive variable values
-            hasVariables: Object.keys(context.variables).length > 0
+            metadata: {
+                automationName: context.metadata.automationName || 'Unknown',
+                hasVariables: Object.keys(context.variables).length > 0,
+                userAgent: context.metadata.userAgent,
+                ...context.metadata
+            }
         };
     }
 
@@ -488,7 +523,8 @@ class ExecutionProgressManager extends EventEmitter {
         
         for (const client of this.connectedClients) {
             try {
-                if (client.readyState === 1) { // WebSocket.OPEN
+                // Add null check before accessing readyState
+                if (client && client.readyState === 1) { // WebSocket.OPEN
                     client.send(messageStr);
                 }
             } catch (error) {

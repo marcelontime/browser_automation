@@ -1,0 +1,156 @@
+{
+  "id": "recording_1753149059927_1fe7f880",
+  "name": "Comprehensive Test Recording",
+  "description": "Advanced automation recorded on 21/07/2025, 22:50:59",
+  "version": "2.0",
+  "type": "advanced_recording",
+  "steps": [],
+  "variables": [],
+  "layers": {
+    "screenshots": [
+      {
+        "id": "recording_start",
+        "description": "Initial page state",
+        "timestamp": 1753149060179,
+        "size": 239885,
+        "viewport": {
+          "width": 1400,
+          "height": 900
+        }
+      },
+      {
+        "id": "recording_end",
+        "description": "Final page state",
+        "timestamp": 1753149067585,
+        "size": 8282,
+        "viewport": {
+          "width": 1400,
+          "height": 900
+        }
+      }
+    ],
+    "domSnapshots": [
+      {
+        "id": "recording_start",
+        "description": "Initial DOM state",
+        "timestamp": 1753149060186,
+        "snapshot": {
+          "forms": [],
+          "inputs": [],
+          "buttons": [],
+          "links": [],
+          "structure": {
+            "title": "",
+            "url": "https://httpbin.org/html",
+            "elementCount": 6
+          }
+        }
+      }
+    ],
+    "context": [
+      {
+        "eventType": "recording_start",
+        "timestamp": 1753149059973,
+        "url": "https://httpbin.org/html",
+        "title": "",
+        "viewport": {
+          "width": 1400,
+          "height": 900
+        },
+        "cookies": [],
+        "localStorage": {},
+        "performance": {
+          "timestamp": 1753149060018,
+          "navigation": {
+            "loadEventEnd": 495.5,
+            "domContentLoadedEventEnd": 494.90000009536743,
+            "responseEnd": 484.80000019073486
+          },
+          "paint": [
+            {
+              "name": "first-paint",
+              "startTime": 540
+            },
+            {
+              "name": "first-contentful-paint",
+              "startTime": 540
+            }
+          ],
+          "memory": {
+            "usedJSHeapSize": 2724885,
+            "totalJSHeapSize": 3684273
+          }
+        }
+      },
+      {
+        "eventType": "recording_end",
+        "timestamp": 1753149067449,
+        "url": "about:blank",
+        "title": "",
+        "viewport": {
+          "width": 1400,
+          "height": 900
+        },
+        "cookies": [],
+        "localStorage": {},
+        "performance": {
+          "timestamp": 1753149067463,
+          "navigation": {
+            "loadEventEnd": 7,
+            "domContentLoadedEventEnd": 6.700000047683716,
+            "responseEnd": 6.6000001430511475
+          },
+          "paint": [],
+          "memory": {
+            "usedJSHeapSize": 1020638,
+            "totalJSHeapSize": 3673850
+          }
+        }
+      }
+    ],
+    "performance": [],
+    "metadata": {
+      "recordingId": "recording_1753149059927_1fe7f880",
+      "sessionId": "1753149033630_78vse2alc",
+      "automationName": "Comprehensive Test Recording",
+      "startTime": 1753149059927,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "initialUrl": "https://httpbin.org/html",
+      "timezone": "America/Sao_Paulo",
+      "language": "en-US",
+      "platform": "Win32",
+      "endTime": 1753149067585,
+      "duration": 7658,
+      "actionCount": 0,
+      "screenshotCount": 2,
+      "domSnapshotCount": 1
+    }
+  },
+  "insights": {
+    "totalDuration": 7658,
+    "actionBreakdown": {
+      "mouse": 0,
+      "keyboard": 0,
+      "touch": 0,
+      "navigation": 0
+    },
+    "variableTypes": {},
+    "screenshotCoverage": 2,
+    "pagesCovered": 2,
+    "formInteractions": 0
+  },
+  "createdAt": 1753149059927,
+  "duration": 7658,
+  "actionCount": 0,
+  "variableCount": 0,
+  "playbackOptions": {
+    "delayBetweenSteps": 1000,
+    "screenshotComparison": true,
+    "adaptiveWaiting": true,
+    "contextValidation": true
+  }
+}

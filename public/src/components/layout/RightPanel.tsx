@@ -3,8 +3,8 @@ import styled from 'styled-components';
 import { Button } from '../ui/Button';
 
 const PanelContainer = styled.aside`
-  width: 450px;
-  min-width: 450px;
+  width: 350px;
+  min-width: 350px;
   background: white;
   border-left: 1px solid var(--neutral-200);
   display: flex;
@@ -13,7 +13,7 @@ const PanelContainer = styled.aside`
   
   @media (max-width: 1024px) {
     position: fixed;
-    right: -450px;
+    right: -350px;
     top: 64px;
     height: calc(100vh - 64px);
     z-index: var(--z-modal);
@@ -168,17 +168,15 @@ const RecordingDot = styled.div<{ isRecording: boolean }>`
   }
 `;
 
-type MessageType = 'user' | 'bot' | 'system' | 'error';
-
-interface Message {
+interface ChatMessage {
   id: string;
   text: string;
-  type: MessageType;
+  type: 'user' | 'bot' | 'system' | 'error';
   timestamp: Date;
 }
 
 interface RightPanelProps {
-  messages: Message[];
+  messages: ChatMessage[];
   isRecording: boolean;
   onSendMessage: (message: string) => void;
   onToggleRecording: () => void;

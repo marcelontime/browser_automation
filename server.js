@@ -12,6 +12,7 @@ const SessionPlanner = require('./modules/planning/session-planner');
 const { Variable, VariableUsage, RecordingSession, EnhancedAutomation, VariableTypes } = require('./modules/storage/models');
 const { OpenAI } = require('openai');
 const { ExecutionProgressManager } = require('./modules/execution');
+const { RealTimeControlManager } = require('./modules/browser/real-time-control');
 
 class StagehandBrowserAutomationServer {
     constructor(options = {}) {
@@ -56,6 +57,9 @@ class StagehandBrowserAutomationServer {
             console.warn(`⚠️ No OpenAI API key configured - variable extraction will be disabled`);
         }
         
+        // Real-time control system
+        this.realTimeControlManager = new RealTimeControlManager();
+        
         this.setupExpress();
         this.initializeStorage();
         this.setupProfileCleanup();
@@ -82,13 +86,13 @@ class StagehandBrowserAutomationServer {
         // Clean up abandoned profiles on server start
         process.on('SIGINT', async () => {
             console.log('🧹 Cleaning up browser profiles...');
-            await this.profileManager.cleanupProfiles();
+            await this.profileManager.cleanupAllTemporaryProfiles();
             process.exit(0);
         });
         
         process.on('SIGTERM', async () => {
             console.log('🧹 Cleaning up browser profiles...');
-            await this.profileManager.cleanupProfiles();
+            await this.profileManager.cleanupAllTemporaryProfiles();
             process.exit(0);
         });
     }
@@ -384,13 +388,21 @@ class StagehandBrowserAutomationServer {
                 const userSession = this.userSessions.get(sessionId);
                 if (userSession) {
                     userSession.ws = null;
-                    // Keep the session and browser state alive for 5 minutes
+                    
+                    // ✅ CRITICAL FIX: Extend timeout if there's an active execution
+                    const cleanupDelay = userSession.currentExecutionId ? 
+                        15 * 60 * 1000 : // 15 minutes for active executions
+                        5 * 60 * 1000;   // 5 minutes for idle sessions
+                    
+                    console.log(`⏰ Session ${sessionId} cleanup scheduled in ${cleanupDelay/1000/60} minutes (active execution: ${!!userSession.currentExecutionId})`);
+                    
+                    // Keep the session and browser state alive 
                     setTimeout(() => {
                         if (userSession.ws === null) {
                             console.log(`⏰ Session ${sessionId} timeout - cleaning up`);
                             this.cleanupSession(sessionId);
                         }
-                    }, 5 * 60 * 1000); // 5 minutes
+                    }, cleanupDelay);
                 }
             });
 
@@ -532,6 +544,23 @@ class StagehandBrowserAutomationServer {
         try {
             console.log(`🧹 Cleaning up session ${sessionId}...`);
             
+            // ✅ CRITICAL FIX: Check if there's an active execution before closing browser
+            if (userSession.currentExecutionId) {
+                console.log(`⚠️ Session ${sessionId} has active execution ${userSession.currentExecutionId} - skipping browser cleanup`);
+                
+                // Only stop screenshot streaming but keep browser alive
+                if (userSession.screenshotInterval) {
+                    clearInterval(userSession.screenshotInterval);
+                }
+                
+                // Remove from connected clients but keep session alive
+                this.connectedClients.delete(userSession.ws);
+                
+                // Don't remove session from map - let execution complete
+                console.log(`⏰ Session ${sessionId} cleanup deferred until execution completes`);
+                return;
+            }
+            
             // Stop screenshot streaming
             if (userSession.screenshotInterval) {
                 clearInterval(userSession.screenshotInterval);
@@ -546,6 +575,9 @@ class StagehandBrowserAutomationServer {
             if (userSession.profilePath) {
                 await this.profileManager.cleanupProfile(userSession.profilePath);
             }
+            
+            // Clean up real-time control session
+            await this.realTimeControlManager.cleanupSession(sessionId);
             
             // Remove from connected clients
             this.connectedClients.delete(userSession.ws);
@@ -596,6 +628,9 @@ class StagehandBrowserAutomationServer {
         }
 
         const { type, data, message: messageContent } = message;
+        
+        // Add debugging
+        console.log(`🔍 [${sessionId}] Processing message type: ${type}, isManualMode: ${userSession.isManualMode}`);
         
         // Extract the actual instruction content
         const instructionData = data || messageContent || message;
@@ -676,12 +711,68 @@ class StagehandBrowserAutomationServer {
                 await this.handleManualClick(userSession, message);
                 break;
             
+            case 'manual_key':
+                await this.handleManualKey(userSession, message);
+                break;
+            
+            // Enhanced real-time controls
+            case 'enhanced_mouse_event':
+                await this.handleEnhancedMouseEvent(userSession, message);
+                break;
+                
+            case 'enhanced_keyboard_event':
+                await this.handleEnhancedKeyboardEvent(userSession, message);
+                break;
+                
+            case 'touch_event':
+                await this.handleTouchEvent(userSession, message);
+                break;
+                
+            case 'get_real_time_status':
+                await this.handleGetRealTimeStatus(userSession, message);
+                break;
+                
+            // Advanced recording controls
+            case 'start_advanced_recording':
+                await this.handleStartAdvancedRecording(userSession, message);
+                break;
+                
+            case 'stop_advanced_recording':
+                await this.handleStopAdvancedRecording(userSession, message);
+                break;
+                
+            case 'get_recording_stats':
+                await this.handleGetRecordingStats(userSession, message);
+                break;
+            
             case 'get_automation_variables':
                 await this.handleGetAutomationVariables(userSession, message);
                 break;
 
             case 'update_automation_variables':
                 await this.handleUpdateAutomationVariables(userSession, message);
+                break;
+                
+            // Direct canvas event handlers (missing handlers)
+            case 'hover':
+            case 'mouse_down':
+            case 'mouse_up':
+            case 'click':
+            case 'double_click':
+            case 'right_click':
+            case 'middle_click':
+            case 'drag_start':
+            case 'drag_move':
+            case 'drag_end':
+            case 'scroll':
+                await this.handleCanvasMouseEvent(userSession, type, message);
+                break;
+                
+            case 'type_text':
+            case 'key_press':
+            case 'key_down':
+            case 'key_up':
+                await this.handleCanvasKeyboardEvent(userSession, type, message);
                 break;
             
             // Enhanced variable management
@@ -931,41 +1022,94 @@ class StagehandBrowserAutomationServer {
 
     async handleToggleManualMode(userSession) {
         try {
-            console.log(`👤 [${userSession.sessionId}] Toggling manual mode`);
+            console.log(`👤 [${userSession.sessionId}] Toggling enhanced manual mode`);
             
             // Toggle manual mode state
+            const wasManualMode = userSession.isManualMode;
             userSession.isManualMode = !userSession.isManualMode;
             
-            const responseMessage = {
-                type: 'manual_mode_toggled',
-                message: `Manual mode ${userSession.isManualMode ? 'enabled' : 'disabled'}`,
-                isManualMode: userSession.isManualMode
-            };
-            
-            this.sendToClient(userSession.ws, responseMessage);
-            
-            // Also add user guidance when enabling manual mode
             if (userSession.isManualMode) {
-                setTimeout(() => {
+                // Enable real-time control
+                console.log(`🎮 [${userSession.sessionId}] Enabling real-time browser control`);
+                
+                try {
+                    // Create real-time control session with advanced recording
+                    const rtSession = this.realTimeControlManager.createSession(
+                        userSession.sessionId,
+                        userSession.automationEngine.page,
+                        userSession.ws,
+                        {
+                            deviceType: this.detectDeviceType(userSession),
+                            recordingEnabled: true, // Always enable advanced recording
+                            openaiApiKey: process.env.OPENAI_API_KEY
+                        }
+                    );
+                    
+                    console.log(`📊 [${userSession.sessionId}] Real-time session created successfully`);
+                    
+                    // Start real-time streaming and controls
+                    await this.realTimeControlManager.startSession(userSession.sessionId);
+                    
+                    console.log(`✅ [${userSession.sessionId}] Real-time streaming started successfully`);
+                } catch (rtError) {
+                    console.error(`❌ [${userSession.sessionId}] Real-time control initialization failed:`, rtError.message);
+                    
+                    // Reset manual mode state on failure
+                    userSession.isManualMode = false;
+                    
                     this.sendToClient(userSession.ws, {
-                        type: 'instruction_result',
-                        message: `🎯 **Manual Mode Active!**\n\n` +
-                                `**What you can do now:**\n` +
-                                `• Type commands like "go to google.com" for direct navigation\n` +
-                                `• Click directly on the screenshot to interact\n` +
-                                `• Use "type hello world" to input text\n` +
-                                `• Use "press Enter" for keyboard commands\n\n` +
-                                `*Commands will execute directly without AI analysis*`,
-                        data: { success: true, manualMode: true }
+                        type: 'error',
+                        message: `❌ Manual mode failed to start: ${rtError.message}. Switched back to auto mode.`
                     });
-                }, 500);
+                    return; // Exit early on failure
+                }
+                
+                const responseMessage = {
+                    type: 'enhanced_manual_mode_enabled',
+                    message: `🎮 **Enhanced Manual Mode Active!**\n\n` +
+                            `**Real-Time Browser Control:**\n` +
+                            `• **Mouse**: Left/Right/Middle click, Drag & Drop, Scroll\n` +
+                            `• **Keyboard**: All shortcuts (Ctrl+C/V, F-keys, etc.)\n` +
+                            `• **Touch**: Mobile gestures (pinch, swipe, long press)\n` +
+                            `• **Streaming**: 15+ FPS real-time browser view\n` +
+                            `• **Recording**: Actions automatically recorded\n\n` +
+                            `**Available Controls:**\n` +
+                            `• **Visual**: Hover effects, drag trails, click feedback\n` +
+                            `• **Performance**: Adaptive quality based on connection\n` +
+                            `• **Cross-Platform**: Desktop, mobile, tablet support\n\n` +
+                            `*Experience feels like using a local browser!*`,
+                    isManualMode: true,
+                    capabilities: {
+                        realTimeStreaming: true,
+                        enhancedMouse: true,
+                        fullKeyboard: true,
+                        touchGestures: true,
+                        visualFeedback: true
+                    }
+                };
+                
+                this.sendToClient(userSession.ws, responseMessage);
+                
+            } else {
+                // Disable real-time control
+                console.log(`🛑 [${userSession.sessionId}] Disabling real-time browser control`);
+                
+                await this.realTimeControlManager.stopSession(userSession.sessionId);
+                
+                const responseMessage = {
+                    type: 'enhanced_manual_mode_disabled',
+                    message: `🤖 **Automatic Mode Active**\n\nSwitched back to AI-powered automation mode.`,
+                    isManualMode: false
+                };
+                
+                this.sendToClient(userSession.ws, responseMessage);
             }
             
         } catch (error) {
-            console.error(`❌ Toggle manual mode error for session ${userSession.sessionId}:`, error.message);
+            console.error(`❌ Enhanced manual mode toggle error for session ${userSession.sessionId}:`, error.message);
             this.sendToClient(userSession.ws, {
                 type: 'error',
-                message: `Toggle manual mode failed: ${error.message}`
+                message: `Enhanced manual mode failed: ${error.message}`
             });
         }
     }
@@ -1072,6 +1216,70 @@ class StagehandBrowserAutomationServer {
             this.sendToClient(userSession.ws, {
                 type: 'error',
                 message: `Manual click failed: ${error.message}`
+            });
+        }
+    }
+
+    async handleManualKey(userSession, message) {
+        try {
+            const { key, type, text } = message;
+            console.log(`⌨️ [${userSession.sessionId}] Manual keyboard input: ${type || 'key'} - ${key || text}`);
+            
+            if (!userSession.isManualMode) {
+                console.log(`❌ Manual keyboard ignored - session ${userSession.sessionId} not in manual mode`);
+                this.sendToClient(userSession.ws, {
+                    type: 'error',
+                    message: '❌ Manual keyboard input only works in manual mode. Please enable manual mode first.'
+                });
+                return;
+            }
+            
+            if (!userSession.automationEngine || !userSession.automationEngine.page) {
+                throw new Error('Automation engine not initialized');
+            }
+            
+            const page = userSession.automationEngine.page;
+            let result = '';
+            
+            if (type === 'type' && text) {
+                // Type text directly
+                await page.keyboard.type(text);
+                result = `✅ Typed: "${text}"`;
+                console.log(`⌨️ Manual typing completed: "${text}"`);
+            } else if (key) {
+                // Press specific key
+                await page.keyboard.press(key);
+                result = `✅ Pressed key: ${key}`;
+                console.log(`⌨️ Manual key press completed: ${key}`);
+            } else {
+                throw new Error('Invalid keyboard input - provide either key or text');
+            }
+            
+            // Record the action if recording is active
+            if (userSession.recordingState.isRecording) {
+                this.recordStep(userSession, {
+                    type: 'manual_keyboard',
+                    key: key,
+                    text: text,
+                    inputType: type,
+                    timestamp: Date.now()
+                });
+            }
+            
+            this.sendToClient(userSession.ws, {
+                type: 'manual_key_completed',
+                message: result,
+                data: { key, text, type }
+            });
+            
+            // Send updated screenshot after a short delay
+            setTimeout(() => this.takeAndSendScreenshot(userSession), 500);
+            
+        } catch (error) {
+            console.error(`❌ Manual keyboard error for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Manual keyboard input failed: ${error.message}`
             });
         }
     }
@@ -1344,7 +1552,7 @@ IMPORTANT: Look for any quoted values, URLs, CPF numbers (XXX.XXX.XXX-XX format)
     // Main instruction handler - Intelligent and agnostic 
     async handleInstruction(userSession, instructionData) {
         try {
-            console.log(`📝 [${userSession.sessionId}] Received instruction: "${instructionData}"`);
+            console.log(`📝 [${userSession.sessionId}] Received instruction: "${instructionData}" (Manual mode: ${userSession.isManualMode})`);
             
             if (!userSession.automationEngine) {
                 throw new Error('Automation engine not initialized');
@@ -1357,26 +1565,35 @@ IMPORTANT: Look for any quoted values, URLs, CPF numbers (XXX.XXX.XXX-XX format)
                 return; // Bypass LLM completely
             }
             
-            // For automatic mode, determine how to handle the instruction
-            const isMissionMode = this.detectMissionMode(instructionData);
+            // ✅ NEW: Check if this requires intelligent strategy planning
+            const needsLLMStrategy = this.shouldUseLLMStrategy(instructionData);
             
-            if (isMissionMode) {
-                // Complex autonomous mission - use session planner with LLM
-                console.log(`🎯 [${userSession.sessionId}] Processing as autonomous mission`);
-                await this.handleAutonomousMission(userSession, instructionData);
+            if (needsLLMStrategy) {
+                // Use LLM SessionPlanner for intelligent strategy creation
+                console.log(`🧠 [${userSession.sessionId}] Using LLM strategy planner for complex request`);
+                await this.handleLLMStrategyPlanning(userSession, instructionData);
             } else {
-                // Step-by-step instructions - parse and execute with capture
-                console.log(`📋 [${userSession.sessionId}] Processing as step instruction`);
+                // For automatic mode, determine how to handle the instruction
+                const isMissionMode = this.detectMissionMode(instructionData);
                 
-                // Parse the multi-step instruction
-                const steps = this.parseMultiStepInstruction(instructionData);
-                console.log(`📝 Successfully parsed ${steps.length} steps:`);
-                steps.forEach((step, index) => {
-                    console.log(`   ${index + 1}. ${step}`);
-                });
-                
-                // Execute steps with recording capture
-                await this.handleStepInstruction(userSession, instructionData, steps);
+                if (isMissionMode) {
+                    // Complex autonomous mission - use session planner with LLM
+                    console.log(`🎯 [${userSession.sessionId}] Processing as autonomous mission`);
+                    await this.handleAutonomousMission(userSession, instructionData);
+                } else {
+                    // Step-by-step instructions - parse and execute with capture
+                    console.log(`📋 [${userSession.sessionId}] Processing as step instruction`);
+                    
+                    // Parse the multi-step instruction
+                    const steps = this.parseMultiStepInstruction(instructionData);
+                    console.log(`📝 Successfully parsed ${steps.length} steps:`);
+                    steps.forEach((step, index) => {
+                        console.log(`   ${index + 1}. ${step}`);
+                    });
+                    
+                    // Execute steps with recording capture
+                    await this.handleStepInstruction(userSession, instructionData, steps);
+                }
             }
 
         } catch (error) {
@@ -1386,6 +1603,102 @@ IMPORTANT: Look for any quoted values, URLs, CPF numbers (XXX.XXX.XXX-XX format)
                 message: `❌ Error: ${error.message}`,
                 data: { success: false, error: error.message }
             });
+        }
+    }
+
+    /**
+     * NEW: Determine if instruction needs LLM strategy planning
+     */
+    shouldUseLLMStrategy(instruction) {
+        const text = instruction.toLowerCase().trim();
+        
+        // Quick direct commands that don't need strategy
+        const directCommands = [
+            /^(click|type|scroll|wait|hover|press|select)\s/i,
+            /^(go to|visit|open)\s+https?:\/\//i,
+            /^take a screenshot/i,
+            /^extract\s+(the\s+)?(text|data|content)/i,
+            /^fill\s+(the\s+)?\w+\s+field/i,
+            /button$/i,
+            /field$/i
+        ];
+        
+        // If it's a clear direct command, don't use LLM strategy
+        if (directCommands.some(pattern => pattern.test(text))) {
+            return false;
+        }
+        
+        // Instructions that need intelligent strategy planning
+        const strategyRequiredPatterns = [
+            // Search requests that need context analysis
+            /search\s+for/i,
+            /find\s+(the\s+)?(best|top|cheapest|most)/i,
+            /look\s+for/i,
+            /locate\s+(the\s+)?(best|top|cheapest|most)/i,
+            
+            // Complex requests that need multi-step planning
+            /book\s+(a\s+)?(flight|hotel|room|table)/i,
+            /buy\s+(a\s+|an\s+|the\s+)?/i,
+            /order\s+(a\s+|an\s+|the\s+)?/i,
+            /apply\s+(for|to)/i,
+            /register\s+(for|on)/i,
+            /sign\s+up\s+(for|on)/i,
+            /create\s+(an?\s+)?account/i,
+            
+            // Goal-oriented requests that need context awareness
+            /help\s+me\s+(find|get|buy|book|order)/i,
+            /i\s+(want|need)\s+to\s+(find|get|buy|book|order)/i,
+            /can\s+you\s+(find|get|buy|book|order)/i,
+            
+            // Complex navigation without specific URLs
+            /go\s+to.*(?:login|signin|register|signup|checkout|cart)/i,
+            /navigate\s+to.*(?:login|signin|register|signup|checkout|cart)/i,
+        ];
+        
+        const needsStrategy = strategyRequiredPatterns.some(pattern => pattern.test(text));
+        
+        // Also check if it's not a simple numbered list (those can use step mode)
+        const isSimpleStepList = /^\s*\d+\.\s*[a-zA-Z]/.test(instruction);
+        
+        console.log(`🤖 Strategy analysis: "${instruction.substring(0, 50)}..." | Needs LLM Strategy: ${needsStrategy && !isSimpleStepList}`);
+        
+        return needsStrategy && !isSimpleStepList;
+    }
+
+    /**
+     * NEW: Handle LLM Strategy Planning using SessionPlanner
+     */
+    async handleLLMStrategyPlanning(userSession, instructionData) {
+        try {
+            this.sendToClient(userSession.ws, {
+                type: 'chat_response',
+                message: `🧠 **Analyzing Request**: ${instructionData}\n\n🎯 Creating intelligent strategy...`
+            });
+
+            // Use SessionPlanner for intelligent strategy creation
+            if (!userSession.sessionPlanner) {
+                throw new Error('SessionPlanner not initialized');
+            }
+
+            const result = await userSession.sessionPlanner.processUserMessage(instructionData);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'chat_response',
+                message: `✅ **Strategy Complete**: ${result.message || 'Automation executed successfully'}\n\n📊 **Actions taken**: ${result.actions ? result.actions.length : 'Multiple'} steps completed`
+            });
+
+        } catch (error) {
+            console.error(`❌ LLM strategy planning failed:`, error.message);
+            
+            // Fallback to step instruction handling
+            this.sendToClient(userSession.ws, {
+                type: 'chat_response',
+                message: `❌ **Strategy planning failed**: ${error.message}\n\n🔄 **Switching to direct execution**...`
+            });
+            
+            // Fall back to step instruction handling
+            const steps = this.parseMultiStepInstruction(instructionData);
+            await this.handleStepInstruction(userSession, instructionData, steps);
         }
     }
 
@@ -1484,6 +1797,17 @@ IMPORTANT: Look for any quoted values, URLs, CPF numbers (XXX.XXX.XXX-XX format)
                 // Focus on the active element and type
                 try {
                     await engine.page.keyboard.type(text);
+                    
+                    // Record the action if recording is active
+                    if (userSession.recordingState.isRecording) {
+                        this.recordStep(userSession, {
+                            type: 'keyboard_type',
+                            text: text,
+                            instruction: instruction,
+                            timestamp: Date.now()
+                        });
+                    }
+                    
                     return {
                         success: true,
                         message: `✅ Typed: "${text}"`,
@@ -1499,26 +1823,90 @@ IMPORTANT: Look for any quoted values, URLs, CPF numbers (XXX.XXX.XXX-XX format)
             }
         }
         
-        // Direct keyboard commands
+        // Direct keyboard commands - Enhanced with more key support
         if (lowerInstruction.includes('press') || lowerInstruction.includes('key')) {
-            const keyMatch = instruction.match(/(?:press|key)\s+(\w+)/i);
+            const keyMatch = instruction.match(/(?:press|key)\s+([a-zA-Z0-9\+\-\s]+)/i);
             if (keyMatch) {
-                const key = keyMatch[1];
+                let key = keyMatch[1].trim();
+                
+                // Map common key names
+                const keyMappings = {
+                    'space': ' ',
+                    'spacebar': ' ',
+                    'enter': 'Enter',
+                    'return': 'Enter',
+                    'tab': 'Tab',
+                    'escape': 'Escape',
+                    'esc': 'Escape',
+                    'backspace': 'Backspace',
+                    'delete': 'Delete',
+                    'up': 'ArrowUp',
+                    'down': 'ArrowDown',
+                    'left': 'ArrowLeft',
+                    'right': 'ArrowRight',
+                    'ctrl+a': 'Control+a',
+                    'ctrl+c': 'Control+c',
+                    'ctrl+v': 'Control+v',
+                    'ctrl+z': 'Control+z',
+                    'ctrl+s': 'Control+s',
+                    'f5': 'F5',
+                    'f12': 'F12'
+                };
+                
+                const mappedKey = keyMappings[key.toLowerCase()] || key;
                 
                 try {
-                    await engine.page.keyboard.press(key);
+                    await engine.page.keyboard.press(mappedKey);
+                    
+                    // Record the action if recording is active
+                    if (userSession.recordingState.isRecording) {
+                        this.recordStep(userSession, {
+                            type: 'keyboard_press',
+                            key: mappedKey,
+                            originalKey: key,
+                            instruction: instruction,
+                            timestamp: Date.now()
+                        });
+                    }
+                    
                     return {
                         success: true,
-                        message: `✅ Pressed key: ${key}`,
+                        message: `✅ Pressed key: ${mappedKey}`,
                         action: 'keypress'
                     };
                 } catch (error) {
                     return {
                         success: false,
-                        message: `❌ Failed to press key: ${key}`,
+                        message: `❌ Failed to press key: ${mappedKey} (${error.message})`,
                         action: 'keypress_error'
                     };
                 }
+            }
+        }
+        
+        // Scroll commands
+        if (lowerInstruction.includes('scroll')) {
+            try {
+                if (lowerInstruction.includes('down')) {
+                    await engine.page.keyboard.press('PageDown');
+                } else if (lowerInstruction.includes('up')) {
+                    await engine.page.keyboard.press('PageUp');
+                } else {
+                    // Default scroll down
+                    await engine.page.keyboard.press('PageDown');
+                }
+                
+                return {
+                    success: true,
+                    message: `✅ Scrolled page`,
+                    action: 'scroll'
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    message: `❌ Failed to scroll: ${error.message}`,
+                    action: 'scroll_error'
+                };
             }
         }
         
@@ -2355,20 +2743,51 @@ Respond in JSON format:
     // Helper method to take and send screenshot
     async takeAndSendScreenshot(userSession) {
         try {
-            if (userSession.automationEngine && userSession.automationEngine.page) {
-                const screenshot = await userSession.automationEngine.page.screenshot({
-                    type: 'jpeg',
-                    quality: 50
-                });
-                
-                this.sendToClient(userSession.ws, {
-                    type: 'screenshot',
-                    message: 'No message',
-                    data: screenshot.toString('base64')
-                });
+            // Check if WebSocket is still connected before taking screenshot
+            if (!userSession.ws || userSession.ws.readyState !== WebSocket.OPEN) {
+                return; // Skip if WebSocket is disconnected
             }
+            
+            // ✅ CRITICAL FIX: Check if automation engine and page are available and not closed
+            if (!userSession.automationEngine || 
+                !userSession.automationEngine.page || 
+                userSession.automationEngine.page.isClosed()) {
+                console.log(`⚠️ Session ${userSession.sessionId} browser not available for screenshot`);
+                return;
+            }
+
+            // ✅ ADDITIONAL SAFETY: Check if browser context is still valid
+            const page = userSession.automationEngine.page;
+            try {
+                await page.evaluate(() => document.readyState); // Simple test to see if page is responsive
+            } catch (testError) {
+                console.log(`⚠️ Session ${userSession.sessionId} page not responsive, skipping screenshot`);
+                return;
+            }
+            
+            const screenshot = await page.screenshot({
+                type: 'jpeg',
+                quality: 50
+            });
+            
+            this.sendToClient(userSession.ws, {
+                type: 'screenshot',
+                message: 'No message',
+                data: screenshot.toString('base64')
+            });
         } catch (error) {
-            console.error(`❌ Error taking screenshot for session ${userSession.sessionId}:`, error.message);
+            // ✅ IMPROVED ERROR HANDLING: Don't spam logs for expected disconnections
+            if (error.message.includes('Target page, context or browser has been closed')) {
+                console.log(`⚠️ Session ${userSession.sessionId} browser context closed - stopping screenshots`);
+                
+                // Stop screenshot interval if browser is closed
+                if (userSession.screenshotInterval) {
+                    clearInterval(userSession.screenshotInterval);
+                    userSession.screenshotInterval = null;
+                }
+            } else {
+                console.error(`❌ Error taking screenshot for session ${userSession.sessionId}:`, error.message);
+            }
         }
     }
 
@@ -2414,8 +2833,9 @@ Respond in JSON format:
             if (success) {
                 this.sendToClient(userSession.ws, {
                     type: 'execution_paused',
-                    message: `⏸️ Execution paused`,
-                    executionId: targetExecutionId
+                    message: `⏸️ Execution paused - Click Resume to continue or Stop to reset`,
+                    executionId: targetExecutionId,
+                    guidance: "Use Resume button to continue automation or Stop button to reset and return to automation controls"
                 });
             } else {
                 throw new Error('Failed to pause execution - execution may not be running');
@@ -2476,11 +2896,18 @@ Respond in JSON format:
                     userSession.currentExecutionId = null;
                 }
                 
+                // ✅ CRITICAL FIX: Reset UI state by sending fresh automations list
+                // This will make the UI show Run/Variables/Delete buttons again
+                setTimeout(async () => {
+                    await this.handleGetAutomations(userSession);
+                }, 1000);
+                
                 this.sendToClient(userSession.ws, {
                     type: 'execution_stopped',
-                    message: `🛑 Execution stopped`,
+                    message: `🛑 Execution stopped - UI reset to show automation controls`,
                     executionId: targetExecutionId,
-                    reason: reason || 'user_requested'
+                    reason: reason || 'user_requested',
+                    uiReset: true // Flag to indicate UI should reset
                 });
             } else {
                 throw new Error('Failed to stop execution - execution may not be active');
@@ -2556,20 +2983,31 @@ Respond in JSON format:
         return processedAction;
     }
 
-    async handleScreenshotRequest(ws) {
+    async handleScreenshotRequest(userSession) {
         try {
-            const screenshot = await this.automationEngine.takeScreenshot();
+            // Use the session-specific automation engine
+            if (!userSession.automationEngine || !userSession.automationEngine.page) {
+                throw new Error('Automation engine not available');
+            }
+
+            const screenshot = await userSession.automationEngine.page.screenshot({
+                type: 'jpeg',
+                quality: 80
+            });
+            
             if (screenshot) {
                 const base64Screenshot = screenshot.toString('base64');
-                this.sendToClient(ws, {
+                this.sendToClient(userSession.ws, {
                     type: 'screenshot',
                     data: base64Screenshot,
                     format: 'jpeg'
                 });
+            } else {
+                throw new Error('No screenshot data captured');
             }
         } catch (error) {
             console.error('❌ Error taking screenshot:', error.message);
-            this.sendToClient(ws, {
+            this.sendToClient(userSession.ws, {
                 type: 'error',
                 message: `Screenshot error: ${error.message}`
             });
@@ -2713,7 +3151,8 @@ Respond in JSON format:
 
     sendToClient(ws, message) {
         try {
-            if (ws.readyState === WebSocket.OPEN) {
+            // Add null check before accessing readyState
+            if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify(message));
             }
         } catch (error) {
@@ -2724,7 +3163,8 @@ Respond in JSON format:
     broadcastToClients(message) {
         const messageStr = JSON.stringify(message);
         this.connectedClients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
+            // Add null check before accessing readyState
+            if (client && client.readyState === WebSocket.OPEN) {
                 client.send(messageStr);
             }
         });
@@ -2876,6 +3316,13 @@ Respond in JSON format:
                     result
                 });
                 
+                // ✅ CRITICAL FIX: Take final screenshot after automation completes
+                setTimeout(() => {
+                    if (userSession.automationEngine) {
+                        this.takeAndSendScreenshot(userSession);
+                    }
+                }, 1000);
+                
             } catch (execError) {
                 // Fail execution tracking
                 this.executionProgressManager.failExecution(executionId, execError);
@@ -2890,6 +3337,24 @@ Respond in JSON format:
             } finally {
                 // Clear execution ID from session
                 userSession.currentExecutionId = null;
+                
+                // ✅ CRITICAL FIX: Only cleanup if WebSocket has been disconnected for more than 30 seconds
+                if (!userSession.ws) {
+                    console.log(`⚠️ Session ${userSession.sessionId} has no active WebSocket after execution - checking if cleanup needed`);
+                    
+                    // Add a longer delay to allow for potential reconnections
+                    setTimeout(() => {
+                        const currentSession = this.userSessions.get(userSession.sessionId);
+                        if (currentSession && !currentSession.ws && !currentSession.currentExecutionId) {
+                            console.log(`🧹 Session ${userSession.sessionId} still disconnected after delay - cleaning up`);
+                            this.cleanupSession(userSession.sessionId);
+                        } else {
+                            console.log(`✅ Session ${userSession.sessionId} reconnected or has new execution - keeping alive`);
+                        }
+                    }, 30000); // 30 second delay instead of 2 seconds
+                } else {
+                    console.log(`✅ Session ${userSession.sessionId} WebSocket still active after execution completion`);
+                }
             }
         } catch (error) {
             this.sendToClient(userSession.ws, {
@@ -2927,6 +3392,17 @@ Respond in JSON format:
         // Calculate total steps including initial navigation
         const totalStepsWithNavigation = originalUrl ? steps.length + 1 : steps.length;
         let currentStepNumber = 0;
+        
+        // ✅ UPDATE EXECUTION CONTEXT: Update totalSteps if initial navigation is added
+        if (originalUrl && totalStepsWithNavigation !== steps.length) {
+            // Update the execution context to reflect the actual total steps
+            const context = this.executionProgressManager.getExecutionStatus(executionId);
+            if (context) {
+                // Update totalSteps in the execution context
+                this.executionProgressManager.updateTotalSteps(executionId, totalStepsWithNavigation);
+                console.log(`📊 Updated total steps from ${steps.length} to ${totalStepsWithNavigation} (includes initial navigation)`);
+            }
+        }
         
         if (originalUrl) {
             console.log(`🌐 [AUTOMATION START] Navigating to original URL: ${originalUrl}`);
@@ -3085,88 +3561,104 @@ Respond in JSON format:
                 switch (processedAction.type) {
                     case 'navigate':
                         console.log(`🌐 Executing navigation to: ${processedAction.url}`);
-                        await userSession.automationEngine.page.goto(processedAction.url, { 
-                            waitUntil: 'domcontentloaded', 
-                            timeout: 15000 
-                        });
-                        
-                        // ✅ FIXED: Record navigation in PlaywrightRecorder during automation execution
-                        if (userSession.recordingState?.isRecording && userSession.automationEngine?.playwrightRecorder) {
-                            userSession.automationEngine.playwrightRecorder.recordNavigation(processedAction.url);
-                            console.log(`🎬 Recorded automation navigation in Playwright script: ${processedAction.url}`);
-                        }
-                        
-                        stepResult = { url: processedAction.url };
+                        stepResult = await this.executeWithCancellation(async () => {
+                            await userSession.automationEngine.page.goto(processedAction.url, { 
+                                waitUntil: 'domcontentloaded', 
+                                timeout: 15000 
+                            });
+                            
+                            // ✅ FIXED: Record navigation in PlaywrightRecorder during automation execution
+                            if (userSession.recordingState?.isRecording && userSession.automationEngine?.playwrightRecorder) {
+                                userSession.automationEngine.playwrightRecorder.recordNavigation(processedAction.url);
+                                console.log(`🎬 Recorded automation navigation in Playwright script: ${processedAction.url}`);
+                            }
+                            
+                            return { url: processedAction.url };
+                        }, executionId, 'navigate');
                         break;
                         
                     case 'type':
                     case 'fill':
                         console.log(`✏️ Executing fill action with text: ${processedAction.text}`);
-                        // Use enhanced form field detection
-                        const fieldType = this.detectFieldType(processedAction);
-                        console.log(`🔍 Detected field type: ${fieldType} for text: ${processedAction.text}`);
-                        
-                        if (fieldType && userSession.automationEngine.executeFormAction) {
-                            console.log(`🎯 Using enhanced form detection for ${fieldType} field`);
-                            await userSession.automationEngine.executeFormAction('fill', fieldType, processedAction.text);
-                        } else {
-                            // Fallback to improved Stagehand instruction with robust wrapper
-                            const fillInstruction = this.generateImprovedFillInstruction(processedAction);
-                            console.log(`🎯 Using Stagehand fill instruction: ${fillInstruction}`);
-                            await userSession.automationEngine.robustPageAct(fillInstruction);
-                        }
-                        stepResult = { text: processedAction.text, fieldType };
+                        stepResult = await this.executeWithCancellation(async () => {
+                            // Use enhanced form field detection
+                            const fieldType = this.detectFieldType(processedAction);
+                            console.log(`🔍 Detected field type: ${fieldType} for text: ${processedAction.text}`);
+                            
+                            if (fieldType && userSession.automationEngine.executeFormAction) {
+                                console.log(`🎯 Using enhanced form detection for ${fieldType} field`);
+                                await userSession.automationEngine.executeFormAction('fill', fieldType, processedAction.text);
+                            } else {
+                                // Fallback to improved Stagehand instruction with robust wrapper
+                                const fillInstruction = this.generateImprovedFillInstruction(processedAction);
+                                console.log(`🎯 Using Stagehand fill instruction: ${fillInstruction}`);
+                                await userSession.automationEngine.robustPageAct(fillInstruction);
+                            }
+                            return { text: processedAction.text, fieldType };
+                        }, executionId, 'fill');
                         break;
                         
                     case 'click':
                         console.log(`🖱️ Executing click action`);
-                        // Use enhanced form field detection for buttons
-                        const buttonType = this.detectButtonType(processedAction);
-                        if (buttonType && userSession.automationEngine.executeFormAction) {
-                            console.log(`🎯 Using enhanced form detection for ${buttonType} button`);
-                            await userSession.automationEngine.executeFormAction('click', buttonType);
-                        } else {
-                            // Fallback to improved Stagehand instruction with robust wrapper
-                            const clickInstruction = this.generateImprovedClickInstruction(processedAction);
-                            console.log(`🎯 Using Stagehand click instruction: ${clickInstruction}`);
-                            await userSession.automationEngine.robustPageAct(clickInstruction);
-                        }
-                        stepResult = { buttonType };
+                        stepResult = await this.executeWithCancellation(async () => {
+                            // Use enhanced form field detection for buttons
+                            const buttonType = this.detectButtonType(processedAction);
+                            if (buttonType && userSession.automationEngine.executeFormAction) {
+                                console.log(`🎯 Using enhanced form detection for ${buttonType} button`);
+                                await userSession.automationEngine.executeFormAction('click', buttonType);
+                            } else {
+                                // Fallback to improved Stagehand instruction with robust wrapper
+                                const clickInstruction = this.generateImprovedClickInstruction(processedAction);
+                                console.log(`🎯 Using Stagehand click instruction: ${clickInstruction}`);
+                                await userSession.automationEngine.robustPageAct(clickInstruction);
+                            }
+                            return { buttonType };
+                        }, executionId, 'click');
                         break;
                         
                     case 'select':
-                        // Use robust Stagehand wrapper to select from dropdown
-                        const selectInstruction = `select "${processedAction.value}" from ${processedAction.selector || processedAction.description}`;
-                        await userSession.automationEngine.robustPageAct(selectInstruction);
-                        stepResult = { value: processedAction.value };
+                        stepResult = await this.executeWithCancellation(async () => {
+                            // Use robust Stagehand wrapper to select from dropdown
+                            const selectInstruction = `select "${processedAction.value}" from ${processedAction.selector || processedAction.description}`;
+                            await userSession.automationEngine.robustPageAct(selectInstruction);
+                            return { value: processedAction.value };
+                        }, executionId, 'select');
                         break;
                         
                     case 'wait':
-                        // Wait for a moment
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                        stepResult = { waitTime: 2000 };
+                        stepResult = await this.executeWithCancellation(async () => {
+                            // Wait for a moment
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            return { waitTime: 2000 };
+                        }, executionId, 'wait');
                         break;
                         
                     case 'generic':
                         console.log(`🎯 Executing generic action: ${processedAction.description}`);
-                        if (processedAction.description) {
-                            await userSession.automationEngine.robustPageAct(processedAction.description);
-                            stepResult = { description: processedAction.description };
-                        } else {
-                            console.log(`⚠️ No description found for generic action`);
-                        }
+                        stepResult = await this.executeWithCancellation(async () => {
+                            if (processedAction.description) {
+                                await userSession.automationEngine.robustPageAct(processedAction.description);
+                                return { description: processedAction.description };
+                            } else {
+                                console.log(`⚠️ No description found for generic action`);
+                                return { description: 'no description' };
+                            }
+                        }, executionId, 'generic');
                         break;
                         
                     default:
                         console.log(`❓ Unknown action type '${processedAction.type}' - using default handler`);
-                        // Use robust Stagehand wrapper for generic actions
-                        if (processedAction.description) {
-                            console.log(`🎯 Using Stagehand generic instruction: ${processedAction.description}`);
-                            await userSession.automationEngine.robustPageAct(processedAction.description);
-                            stepResult = { description: processedAction.description };
-                        } else {
-                            console.log(`⚠️ No description found for unknown action type '${processedAction.type}'`);
-                        }
+                        stepResult = await this.executeWithCancellation(async () => {
+                            // Use robust Stagehand wrapper for generic actions
+                            if (processedAction.description) {
+                                console.log(`🎯 Using Stagehand generic instruction: ${processedAction.description}`);
+                                await userSession.automationEngine.robustPageAct(processedAction.description);
+                                return { description: processedAction.description };
+                            } else {
+                                console.log(`⚠️ No description found for unknown action type '${processedAction.type}'`);
+                                return { description: 'unknown action' };
+                            }
+                        }, executionId, 'default');
                 }
                 
                 const stepDuration = Date.now() - stepStartTime;
@@ -3341,27 +3833,33 @@ Respond in JSON format:
     }
 
     /**
-     * Detect field type from action properties
+     * Detect field type from action properties with improved logic
      */
     detectFieldType(action) {
         const selector = (action.selector || action.description || '').toLowerCase();
         const text = (action.text || '').toLowerCase();
+        const instruction = (action.instruction || '').toLowerCase();
+        const value = action.text || action.value || '';
         
         // CPF field detection (prioritize this for Brazilian forms)
         if (selector.includes('cpf') || selector.includes('document') ||
             selector.includes('usuario') || selector.includes('login') ||
-            this.isCPFPattern(action.text || action.value || '')) {
+            this.isCPFPattern(value)) {
             return 'cpf';
         }
         
-        // Email field detection
-        if (selector.includes('email') || text.includes('@')) {
-            return 'email';
+        // Password field detection (check first - prioritize over email)
+        if (selector.includes('password') || selector.includes('senha') ||
+            instruction.includes('password') || instruction.includes('senha') ||
+            // Password indicators in the action context
+            (instruction.includes('fill') && (instruction.includes('password') || instruction.includes('senha')))) {
+            return 'password';
         }
         
-        // Password field detection
-        if (selector.includes('password') || selector.includes('senha')) {
-            return 'password';
+        // Email field detection (but NOT if it looks like a password)
+        if ((selector.includes('email') || this.looksLikeEmail(value)) &&
+            !this.looksLikePassword(value)) {
+            return 'email';
         }
         
         // Phone field detection
@@ -3376,6 +3874,56 @@ Respond in JSON format:
         }
         
         return null;
+    }
+
+    /**
+     * Check if a value looks like an actual email address (not just contains @)
+     */
+    looksLikeEmail(value) {
+        if (!value) return false;
+        // Must have @ and a domain with at least one dot after @
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailPattern.test(value);
+    }
+
+    /**
+     * Check if a value looks like a password (not an email)
+     */
+    looksLikePassword(value) {
+        if (!value) return false;
+        
+        // First check: if it's a valid email, it's NOT a password
+        if (this.looksLikeEmail(value)) {
+            return false;
+        }
+        
+        // Patterns that suggest it's a password, not an email:
+        // 1. Contains @ but doesn't have a valid domain structure
+        // 2. Has password-like characteristics (mixed case, numbers, symbols)
+        // 3. Doesn't end with a valid TLD after @
+        
+        if (value.includes('@')) {
+            // If it contains @ but doesn't look like a real email, it's likely a password
+            const parts = value.split('@');
+            if (parts.length === 2) {
+                const domain = parts[1];
+                // Check if domain part looks like a real domain (has . and valid TLD)
+                if (!domain.includes('.') || domain.length < 3) {
+                    return true; // Likely password like "Akad@2025"
+                }
+            }
+        }
+        
+        // Other password indicators:
+        // - Contains numbers and letters
+        // - Has special characters
+        // - Reasonable password length
+        const hasNumbers = /\d/.test(value);
+        const hasLetters = /[a-zA-Z]/.test(value);
+        const hasSpecialChars = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(value);
+        const reasonableLength = value.length >= 6 && value.length <= 50;
+        
+        return (hasNumbers && hasLetters && reasonableLength) || hasSpecialChars;
     }
 
     /**
@@ -3960,18 +4508,11 @@ Respond in JSON format:
                     automationId
                 });
                 
-                // Send updated list
+                // Send updated list with full automation data (including variables)
                 const automations = Array.from(this.savedAutomations.values());
                 this.sendToClient(userSession.ws, {
                     type: 'automations_list',
-                    automations: automations.map(a => ({
-                        id: a.id,
-                        name: a.name,
-                        description: a.description,
-                        stepCount: a.stepCount || a.steps?.length || 0,
-                        variableCount: a.variableCount || a.variables?.length || 0,
-                        createdAt: a.createdAt
-                    }))
+                    automations: automations // Send full automation objects like handleGetAutomations does
                 });
             } else {
                 this.sendToClient(userSession.ws, {
@@ -4075,6 +4616,72 @@ Respond in JSON format:
     }
 
     /**
+     * Execute action with cancellation support
+     * Checks for pause/stop status during execution
+     */
+    async executeWithCancellation(actionFunction, executionId, actionType) {
+        let cancelled = false;
+        let paused = false;
+        
+        // Check status every 500ms during action execution
+        const statusCheckInterval = setInterval(() => {
+            const status = this.executionProgressManager.getExecutionStatus(executionId);
+            if (!status) {
+                cancelled = true;
+                return;
+            }
+            
+            if (status.status === 'cancelled') {
+                cancelled = true;
+                console.log(`🛑 Action ${actionType} cancelled during execution`);
+            } else if (status.status === 'paused') {
+                paused = true;
+                console.log(`⏸️ Action ${actionType} paused during execution`);
+            } else if (status.status === 'running' && paused) {
+                paused = false;
+                console.log(`▶️ Action ${actionType} resumed during execution`);
+            }
+        }, 500);
+        
+        try {
+            // Create a race between the action and cancellation check
+            const result = await Promise.race([
+                actionFunction(),
+                new Promise((resolve, reject) => {
+                    const checkCancellation = async () => {
+                        while (!cancelled) {
+                            if (paused) {
+                                console.log(`⏸️ Waiting while ${actionType} action is paused...`);
+                                while (paused && !cancelled) {
+                                    await new Promise(resolve => setTimeout(resolve, 1000));
+                                }
+                                if (cancelled) break;
+                                console.log(`▶️ Resuming ${actionType} action...`);
+                            }
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                        }
+                        if (cancelled) {
+                            reject(new Error('Action cancelled by user'));
+                        }
+                    };
+                    checkCancellation();
+                })
+            ]);
+            
+            clearInterval(statusCheckInterval);
+            return result;
+            
+        } catch (error) {
+            clearInterval(statusCheckInterval);
+            
+            if (cancelled || error.message.includes('cancelled')) {
+                throw new Error('Execution cancelled by user');
+            }
+            throw error;
+        }
+    }
+
+    /**
      * Generate actual Playwright script from recorded automation
      */
     generatePlaywrightScript(automation, variables = {}) {
@@ -4093,7 +4700,7 @@ async function ${this.sanitizeFunctionName(automation.name)}() {
     });
     
     const context = await browser.newContext({
-        viewport: { width: 1280, height: 720 },
+        viewport: { width: 1920, height: 1080 },
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     });
     
@@ -4305,6 +4912,432 @@ if (require.main === module) {
             this.sendToClient(userSession.ws, {
                 type: 'error',
                 message: `❌ Failed to generate script: ${error.message}`
+            });
+        }
+    }
+
+    // Enhanced mouse event handler
+    async handleEnhancedMouseEvent(userSession, message) {
+        try {
+            const { type, x, y, button, modifiers, deltaX, deltaY } = message;
+            console.log(`🖱️ [${userSession.sessionId}] Enhanced mouse ${type} at (${x}, ${y})`);
+            
+            if (!userSession.isManualMode) {
+                this.sendToClient(userSession.ws, {
+                    type: 'error',
+                    message: '❌ Enhanced mouse controls only work in manual mode'
+                });
+                return;
+            }
+            
+            // Route to real-time control manager
+            await this.realTimeControlManager.handleMouseEvent(userSession.sessionId, {
+                type, x, y, button, modifiers, deltaX, deltaY
+            });
+            
+        } catch (error) {
+            console.error(`❌ Enhanced mouse event error for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Enhanced mouse action failed: ${error.message}`
+            });
+        }
+    }
+
+    // Enhanced keyboard event handler
+    async handleEnhancedKeyboardEvent(userSession, message) {
+        try {
+            const { type, key, text, modifiers } = message;
+            console.log(`⌨️ [${userSession.sessionId}] Enhanced keyboard ${type}: ${key || text}`);
+            
+            if (!userSession.isManualMode) {
+                this.sendToClient(userSession.ws, {
+                    type: 'error',
+                    message: '❌ Enhanced keyboard controls only work in manual mode'
+                });
+                return;
+            }
+            
+            // Route to real-time control manager
+            await this.realTimeControlManager.handleKeyboardEvent(userSession.sessionId, {
+                type, key, text, modifiers
+            });
+            
+        } catch (error) {
+            console.error(`❌ Enhanced keyboard event error for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Enhanced keyboard action failed: ${error.message}`
+            });
+        }
+    }
+
+    // Touch/gesture event handler for mobile
+    async handleTouchEvent(userSession, message) {
+        try {
+            const { type, touches, center, scale, rotation } = message;
+            console.log(`👆 [${userSession.sessionId}] Touch ${type}`);
+            
+            if (!userSession.isManualMode) {
+                this.sendToClient(userSession.ws, {
+                    type: 'error',
+                    message: '❌ Touch controls only work in manual mode'
+                });
+                return;
+            }
+            
+            // Route to real-time control manager
+            await this.realTimeControlManager.handleTouchEvent(userSession.sessionId, {
+                type, touches, center, scale, rotation
+            });
+            
+        } catch (error) {
+            console.error(`❌ Touch event error for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Touch action failed: ${error.message}`
+            });
+        }
+    }
+
+    // Canvas mouse event handler - routes canvas events to browser actions
+    async handleCanvasMouseEvent(userSession, eventType, message) {
+        try {
+            console.log(`🖱️ [${userSession.sessionId}] Canvas mouse ${eventType}:`, message);
+            
+            if (!userSession.isManualMode) {
+                this.sendToClient(userSession.ws, {
+                    type: 'error',
+                    message: '❌ Canvas mouse controls only work in manual mode'
+                });
+                return;
+            }
+            
+            if (!userSession.automationEngine || !userSession.automationEngine.page) {
+                throw new Error('Automation engine not initialized');
+            }
+            
+            const page = userSession.automationEngine.page;
+            const { x, y, button, deltaX, deltaY } = message;
+            
+            // Execute the mouse action directly on the browser
+            switch (eventType) {
+                case 'click':
+                    await page.mouse.click(x, y, { button: button || 'left' });
+                    console.log(`✅ [${userSession.sessionId}] Canvas click executed at (${x}, ${y})`);
+                    break;
+                    
+                case 'double_click':
+                    await page.mouse.click(x, y, { clickCount: 2 });
+                    console.log(`✅ [${userSession.sessionId}] Canvas double-click executed at (${x}, ${y})`);
+                    break;
+                    
+                case 'right_click':
+                    await page.mouse.click(x, y, { button: 'right' });
+                    console.log(`✅ [${userSession.sessionId}] Canvas right-click executed at (${x}, ${y})`);
+                    break;
+                    
+                case 'middle_click':
+                    await page.mouse.click(x, y, { button: 'middle' });
+                    console.log(`✅ [${userSession.sessionId}] Canvas middle-click executed at (${x}, ${y})`);
+                    break;
+                    
+                case 'mouse_down':
+                    await page.mouse.move(x, y);
+                    await page.mouse.down({ button: button || 'left' });
+                    console.log(`✅ [${userSession.sessionId}] Canvas mouse down at (${x}, ${y})`);
+                    break;
+                    
+                case 'mouse_up':
+                    await page.mouse.up({ button: button || 'left' });
+                    console.log(`✅ [${userSession.sessionId}] Canvas mouse up`);
+                    break;
+                    
+                case 'hover':
+                    await page.mouse.move(x, y);
+                    // Don't log hover events to avoid spam (throttled by frontend)
+                    break;
+                    
+                case 'drag_start':
+                    await page.mouse.move(x, y);
+                    await page.mouse.down();
+                    console.log(`✅ [${userSession.sessionId}] Canvas drag start at (${x}, ${y})`);
+                    break;
+                    
+                case 'drag_move':
+                    await page.mouse.move(x, y);
+                    // Don't log drag moves to avoid spam
+                    break;
+                    
+                case 'drag_end':
+                    await page.mouse.move(x, y);
+                    await page.mouse.up();
+                    console.log(`✅ [${userSession.sessionId}] Canvas drag end at (${x}, ${y})`);
+                    break;
+                    
+                case 'scroll':
+                    // Smooth scrolling with proper delta values
+                    const scrollX = deltaX || 0;
+                    const scrollY = deltaY || 0;
+                    
+                    // Scroll the page smoothly
+                    await page.evaluate(({ x, y }) => {
+                        window.scrollBy({
+                            left: x,
+                            top: y,
+                            behavior: 'smooth'
+                        });
+                    }, { x: scrollX, y: scrollY });
+                    
+                    console.log(`✅ [${userSession.sessionId}] Canvas smooth scroll: deltaX=${scrollX}, deltaY=${scrollY}`);
+                    break;
+            }
+            
+            // Send success response
+            this.sendToClient(userSession.ws, {
+                type: 'canvas_mouse_completed',
+                message: `✅ Canvas ${eventType} completed`,
+                eventType,
+                coordinates: { x, y }
+            });
+            
+        } catch (error) {
+            console.error(`❌ Canvas mouse event error for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Canvas ${eventType} failed: ${error.message}`
+            });
+        }
+    }
+
+    // Canvas keyboard event handler - routes canvas events to browser actions  
+    async handleCanvasKeyboardEvent(userSession, eventType, message) {
+        try {
+            console.log(`⌨️ [${userSession.sessionId}] Canvas keyboard ${eventType}:`, message);
+            
+            if (!userSession.isManualMode) {
+                this.sendToClient(userSession.ws, {
+                    type: 'error',
+                    message: '❌ Canvas keyboard controls only work in manual mode'
+                });
+                return;
+            }
+            
+            if (!userSession.automationEngine || !userSession.automationEngine.page) {
+                throw new Error('Automation engine not initialized');
+            }
+            
+            const page = userSession.automationEngine.page;
+            const { key, text, modifiers } = message;
+            
+            // Execute the keyboard action directly on the browser
+            switch (eventType) {
+                case 'type_text':
+                    await page.keyboard.type(text, { delay: 50 });
+                    console.log(`✅ [${userSession.sessionId}] Canvas typed text: "${text}"`);
+                    break;
+                    
+                case 'key_press':
+                    await page.keyboard.press(key, { modifiers });
+                    console.log(`✅ [${userSession.sessionId}] Canvas key press: "${key}"`);
+                    break;
+                    
+                case 'key_down':
+                    await page.keyboard.down(key, { modifiers });
+                    console.log(`✅ [${userSession.sessionId}] Canvas key down: "${key}"`);
+                    break;
+                    
+                case 'key_up':
+                    await page.keyboard.up(key);
+                    console.log(`✅ [${userSession.sessionId}] Canvas key up: "${key}"`);
+                    break;
+            }
+            
+            // Send success response
+            this.sendToClient(userSession.ws, {
+                type: 'canvas_keyboard_completed',
+                message: `✅ Canvas ${eventType} completed`,
+                eventType,
+                key: key || text
+            });
+            
+        } catch (error) {
+            console.error(`❌ Canvas keyboard event error for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Canvas ${eventType} failed: ${error.message}`
+            });
+        }
+    }
+
+    // Device type detection for adaptive streaming
+    detectDeviceType(userSession) {
+        // Basic device detection - can be enhanced with User-Agent parsing
+        const ws = userSession.ws;
+        if (ws && ws.upgradeReq) {
+            const userAgent = ws.upgradeReq.headers['user-agent'] || '';
+            if (/Mobile|Android|iPhone|iPad/.test(userAgent)) {
+                return 'mobile';
+            }
+        }
+        return 'desktop';
+    }
+
+    // Get real-time control status
+    async handleGetRealTimeStatus(userSession, message) {
+        try {
+            const sessionInfo = this.realTimeControlManager.getSessionInfo(userSession.sessionId);
+            const recordingStats = this.realTimeControlManager.getRecordingStats(userSession.sessionId);
+            
+            this.sendToClient(userSession.ws, {
+                type: 'real_time_status',
+                sessionInfo,
+                isActive: userSession.isManualMode,
+                recording: {
+                    enabled: this.realTimeControlManager.isRecordingEnabled(userSession.sessionId),
+                    active: this.realTimeControlManager.isCurrentlyRecording(userSession.sessionId),
+                    stats: recordingStats
+                },
+                capabilities: sessionInfo ? {
+                    streaming: sessionInfo.streaming,
+                    controls: ['mouse', 'keyboard', 'touch'],
+                    features: ['visual_feedback', 'adaptive_quality', 'advanced_recording', 'smart_variables', 'context_capture']
+                } : null
+            });
+            
+        } catch (error) {
+            console.error(`❌ Real-time status error for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to get real-time status: ${error.message}`
+            });
+        }
+    }
+
+    // Advanced recording handlers
+    async handleStartAdvancedRecording(userSession, message) {
+        try {
+            const { automationName = 'Remote Control Recording' } = message;
+            
+            if (!userSession.isManualMode) {
+                this.sendToClient(userSession.ws, {
+                    type: 'error',
+                    message: '❌ Advanced recording only works in manual mode'
+                });
+                return;
+            }
+            
+            console.log(`🎬 [${userSession.sessionId}] Starting advanced recording: ${automationName}`);
+            
+            const success = await this.realTimeControlManager.startRecording(userSession.sessionId, automationName);
+            
+            if (success) {
+                this.sendToClient(userSession.ws, {
+                    type: 'advanced_recording_started',
+                    message: `🎬 **Advanced Recording Started!**\n\n` +
+                            `**Recording**: ${automationName}\n` +
+                            `**Features Active**:\n` +
+                            `• **Multi-Layer Capture**: Actions, Screenshots, DOM, Performance\n` +
+                            `• **Smart Variables**: AI-powered variable detection\n` +
+                            `• **Context Awareness**: Form analysis and field detection\n` +
+                            `• **Real-Time Analysis**: Live pattern recognition\n\n` +
+                            `*All your remote control actions are being recorded with advanced context capture!*`,
+                    automationName,
+                    capabilities: {
+                        multiLayer: true,
+                        smartVariables: true,
+                        contextCapture: true,
+                        performanceTracking: true,
+                        realTimeAnalysis: true
+                    }
+                });
+            } else {
+                throw new Error('Failed to start recording');
+            }
+            
+        } catch (error) {
+            console.error(`❌ Start advanced recording error for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to start advanced recording: ${error.message}`
+            });
+        }
+    }
+
+    async handleStopAdvancedRecording(userSession, message) {
+        try {
+            console.log(`🛑 [${userSession.sessionId}] Stopping advanced recording`);
+            
+            const automation = await this.realTimeControlManager.stopRecording(userSession.sessionId);
+            
+            if (automation) {
+                // Save to automations directory
+                const automationPath = path.join(__dirname, 'automations', `${automation.id}.json`);
+                await fs.writeFile(automationPath, JSON.stringify(automation, null, 2));
+                
+                this.sendToClient(userSession.ws, {
+                    type: 'advanced_recording_completed',
+                    message: `✅ **Advanced Recording Completed!**\n\n` +
+                            `**Automation**: ${automation.name}\n` +
+                            `**Duration**: ${Math.round(automation.duration / 1000)}s\n` +
+                            `**Steps Recorded**: ${automation.steps.length}\n` +
+                            `**Variables Detected**: ${automation.variableCount}\n` +
+                            `**Screenshots**: ${automation.layers.screenshots.length}\n` +
+                            `**Performance Data**: ${automation.layers.performance.length} snapshots\n\n` +
+                            `**Action Breakdown**:\n` +
+                            `• Mouse: ${automation.insights.actionBreakdown.mouse}\n` +
+                            `• Keyboard: ${automation.insights.actionBreakdown.keyboard}\n` +
+                            `• Touch: ${automation.insights.actionBreakdown.touch}\n` +
+                            `• Navigation: ${automation.insights.actionBreakdown.navigation}\n\n` +
+                            `*Advanced automation saved with complete context and smart variables!*`,
+                    automation: {
+                        id: automation.id,
+                        name: automation.name,
+                        description: automation.description,
+                        stepCount: automation.steps.length,
+                        variableCount: automation.variableCount,
+                        duration: automation.duration,
+                        insights: automation.insights
+                    }
+                });
+            } else {
+                throw new Error('No recording in progress');
+            }
+            
+        } catch (error) {
+            console.error(`❌ Stop advanced recording error for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to stop advanced recording: ${error.message}`
+            });
+        }
+    }
+
+    async handleGetRecordingStats(userSession, message) {
+        try {
+            const stats = this.realTimeControlManager.getRecordingStats(userSession.sessionId);
+            
+            if (stats) {
+                this.sendToClient(userSession.ws, {
+                    type: 'recording_stats',
+                    stats: {
+                        ...stats,
+                        formattedDuration: `${Math.round(stats.duration / 1000)}s`
+                    }
+                });
+            } else {
+                this.sendToClient(userSession.ws, {
+                    type: 'recording_stats',
+                    stats: null,
+                    message: 'No recording in progress'
+                });
+            }
+            
+        } catch (error) {
+            console.error(`❌ Get recording stats error for session ${userSession.sessionId}:`, error.message);
+            this.sendToClient(userSession.ws, {
+                type: 'error',
+                message: `Failed to get recording stats: ${error.message}`
             });
         }
     }

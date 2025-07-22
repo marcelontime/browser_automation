@@ -1,72 +1,135 @@
 import React from 'react';
-import styled from 'styled-components';
+import styled, { css } from 'styled-components';
 
 interface BadgeProps {
   children: React.ReactNode;
-  variant?: 'default' | 'secondary' | 'destructive' | 'outline';
+  variant?: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'outline';
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  icon?: React.ReactNode;
+  dot?: boolean;
+  pulse?: boolean;
 }
 
-const StyledBadge = styled.span<{ $variant: string; $size: string }>`
+const BadgeContainer = styled.span<{
+  $variant: string;
+  $size: string;
+  $dot: boolean;
+  $pulse: boolean;
+}>`
   display: inline-flex;
   align-items: center;
-  border-radius: var(--radius-full);
+  justify-content: center;
+  font-family: var(--font-sans);
   font-weight: var(--font-medium);
-  line-height: 1;
-  transition: all var(--transition-fast);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  transition: var(--transition-fast);
+  position: relative;
   
-  /* Size variants */
   ${props => {
+    if (props.$dot) {
+      return css`
+        width: 8px;
+        height: 8px;
+        padding: 0;
+        border-radius: 50%;
+      `;
+    }
+    
     switch (props.$size) {
       case 'sm':
-        return `
+        return css`
           padding: var(--space-1) var(--space-2);
           font-size: var(--text-xs);
+          line-height: var(--leading-none);
+          min-height: 20px;
         `;
       case 'lg':
-        return `
-          padding: var(--space-2) var(--space-3);
+        return css`
+          padding: var(--space-2) var(--space-4);
           font-size: var(--text-sm);
+          line-height: var(--leading-tight);
+          min-height: 32px;
         `;
-      default:
-        return `
-          padding: var(--space-1) var(--space-2);
+      default: // md
+        return css`
+          padding: var(--space-1-5) var(--space-3);
           font-size: var(--text-xs);
+          line-height: var(--leading-tight);
+          min-height: 24px;
         `;
     }
   }}
   
   ${props => {
     switch (props.$variant) {
-      case 'default':
-        return `
-          background: var(--primary-100);
-          color: var(--primary-800);
+      case 'primary':
+        return css`
+          background: var(--primary-600);
+          color: var(--neutral-0);
         `;
       case 'secondary':
-        return `
-          background: var(--neutral-100);
-          color: var(--neutral-800);
+        return css`
+          background: var(--secondary-600);
+          color: var(--neutral-0);
         `;
-      case 'destructive':
-        return `
-          background: var(--red-100);
-          color: var(--red-800);
+      case 'success':
+        return css`
+          background: var(--success-100);
+          color: var(--success-800);
+          border: 1px solid var(--success-200);
+        `;
+      case 'warning':
+        return css`
+          background: var(--warning-100);
+          color: var(--warning-800);
+          border: 1px solid var(--warning-200);
+        `;
+      case 'error':
+        return css`
+          background: var(--error-100);
+          color: var(--error-800);
+          border: 1px solid var(--error-200);
         `;
       case 'outline':
-        return `
+        return css`
           background: transparent;
           color: var(--neutral-700);
           border: 1px solid var(--neutral-300);
         `;
-      default:
-        return `
-          background: var(--primary-100);
-          color: var(--primary-800);
+      default: // default
+        return css`
+          background: var(--neutral-100);
+          color: var(--neutral-800);
+          border: 1px solid var(--neutral-200);
         `;
     }
   }}
+  
+  ${props => props.$pulse && css`
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.5;
+      }
+    }
+  `}
+`;
+
+const BadgeIcon = styled.span`
+  display: inline-flex;
+  align-items: center;
+  margin-right: var(--space-1);
+`;
+
+const BadgeContent = styled.span`
+  display: inline-flex;
+  align-items: center;
 `;
 
 export const Badge: React.FC<BadgeProps> = ({
@@ -74,11 +137,26 @@ export const Badge: React.FC<BadgeProps> = ({
   variant = 'default',
   size = 'md',
   className,
+  icon,
+  dot = false,
+  pulse = false,
   ...props
 }) => {
   return (
-    <StyledBadge $variant={variant} $size={size} className={className} {...props}>
-      {children}
-    </StyledBadge>
+    <BadgeContainer
+      $variant={variant}
+      $size={size}
+      $dot={dot}
+      $pulse={pulse}
+      className={className}
+      {...props}
+    >
+      {!dot && (
+        <BadgeContent>
+          {icon && <BadgeIcon>{icon}</BadgeIcon>}
+          {children}
+        </BadgeContent>
+      )}
+    </BadgeContainer>
   );
 };

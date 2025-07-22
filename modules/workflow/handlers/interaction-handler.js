@@ -1,5 +1,9 @@
+const SelfHealingEngine = require('../../execution/self-healing-engine');
+const VisualSimilarityMatcher = require('../../execution/visual-similarity-matcher');
+const SemanticContextAnalyzer = require('../../execution/semantic-context-analyzer');
+
 /**
- * Interaction step handler for user interactions (clicks, typing, etc.)
+ * Enhanced Interaction step handler with self-healing capabilities
  */
 class InteractionHandler {
     constructor(options = {}) {
@@ -7,8 +11,16 @@ class InteractionHandler {
             defaultTimeout: options.defaultTimeout || 30000,
             retryAttempts: options.retryAttempts || 3,
             retryDelay: options.retryDelay || 1000,
+            enableSelfHealing: options.enableSelfHealing !== false,
             ...options
         };
+        
+        // Initialize self-healing components
+        if (this.options.enableSelfHealing) {
+            this.selfHealingEngine = new SelfHealingEngine(options.selfHealing || {});
+            this.visualMatcher = new VisualSimilarityMatcher(options.visualMatching || {});
+            this.semanticAnalyzer = new SemanticContextAnalyzer(options.semanticAnalysis || {});
+        }
     }
 
     /**
@@ -88,13 +100,17 @@ class InteractionHandler {
     }
 
     /**
-     * Handle click interaction
+     * Handle click interaction with self-healing
      */
     async handleClick(page, selector, step, context) {
         const processedSelector = this.processSelector(selector, context);
         
-        // Wait for element to be available
-        await this.waitForElement(page, processedSelector, step);
+        // Try to find element with self-healing
+        const element = await this.findElementWithHealing(page, processedSelector, step, context);
+        
+        if (!element) {
+            throw new Error(`Click target not found: ${processedSelector}`);
+        }
         
         // Get click options
         const options = {
@@ -105,8 +121,8 @@ class InteractionHandler {
             delay: step.delay || 0
         };
 
-        // Perform click
-        await page.click(processedSelector, options);
+        // Perform click on the found element
+        await element.click(options);
         
         // Wait for any post-click conditions
         if (step.waitAfter) {
@@ -116,23 +132,28 @@ class InteractionHandler {
         return {
             selector: processedSelector,
             options,
-            timestamp: new Date()
+            timestamp: new Date(),
+            selfHealed: element !== await page.$(processedSelector)
         };
     }
 
     /**
-     * Handle type interaction
+     * Handle type interaction with self-healing
      */
     async handleType(page, selector, text, step, context) {
         const processedSelector = this.processSelector(selector, context);
         const processedText = this.processText(text, context);
         
-        // Wait for element to be available
-        await this.waitForElement(page, processedSelector, step);
+        // Try to find element with self-healing
+        const element = await this.findElementWithHealing(page, processedSelector, step, context);
+        
+        if (!element) {
+            throw new Error(`Type target not found: ${processedSelector}`);
+        }
         
         // Clear existing text if specified
         if (step.clear !== false) {
-            await page.fill(processedSelector, '');
+            await element.fill('');
         }
         
         // Type options
@@ -143,14 +164,14 @@ class InteractionHandler {
 
         // Perform typing
         if (step.clear === false) {
-            await page.type(processedSelector, processedText, options);
+            await element.type(processedText, options);
         } else {
-            await page.fill(processedSelector, processedText);
+            await element.fill(processedText);
         }
         
         // Trigger change event if needed
         if (step.triggerChange !== false) {
-            await page.dispatchEvent(processedSelector, 'change');
+            await element.dispatchEvent('change');
         }
         
         // Wait for any post-type conditions
@@ -162,7 +183,8 @@ class InteractionHandler {
             selector: processedSelector,
             text: processedText,
             options,
-            timestamp: new Date()
+            timestamp: new Date(),
+            selfHealed: element !== await page.$(processedSelector)
         };
     }
 
@@ -366,20 +388,95 @@ class InteractionHandler {
     }
 
     /**
-     * Wait for element to be available and interactable
+     * Wait for element to be available and interactable with self-healing
      */
     async waitForElement(page, selector, step) {
         const timeout = step.timeout || this.options.defaultTimeout;
         
-        // Wait for element to exist
-        await page.waitForSelector(selector, {
-            timeout,
-            state: step.waitForState || 'visible'
-        });
-        
-        // Additional wait for element to be stable if specified
-        if (step.waitForStable) {
-            await page.waitForTimeout(step.waitForStable);
+        try {
+            // Try standard element waiting first
+            await page.waitForSelector(selector, {
+                timeout: Math.min(timeout / 2, 15000), // Use half timeout for initial attempt
+                state: step.waitForState || 'visible'
+            });
+            
+            // Additional wait for element to be stable if specified
+            if (step.waitForStable) {
+                await page.waitForTimeout(step.waitForStable);
+            }
+            
+            return true;
+            
+        } catch (error) {
+            // If self-healing is enabled, try to find element using advanced strategies
+            if (this.options.enableSelfHealing && this.selfHealingEngine) {
+                console.log(`Standard element wait failed for ${selector}, attempting self-healing...`);
+                
+                try {
+                    const result = await this.selfHealingEngine.findElement(page, selector, {
+                        step,
+                        timeout: timeout / 2,
+                        getVariable: (name) => step.context?.getVariable?.(name)
+                    });
+                    
+                    if (result && result.element) {
+                        console.log(`Self-healing successful using ${result.strategy} strategy`);
+                        return true;
+                    }
+                } catch (healingError) {
+                    console.warn('Self-healing also failed:', healingError.message);
+                }
+            }
+            
+            // Re-throw original error if self-healing failed or is disabled
+            throw error;
+        }
+    }
+
+    /**
+     * Enhanced element finding with self-healing capabilities
+     */
+    async findElementWithHealing(page, selector, step, context) {
+        try {
+            // Try standard selector first
+            const element = await page.$(selector);
+            if (element && await this.isElementInteractable(element)) {
+                return element;
+            }
+            
+            // If self-healing is enabled and element not found or not interactable
+            if (this.options.enableSelfHealing && this.selfHealingEngine) {
+                const result = await this.selfHealingEngine.findElement(page, selector, {
+                    step,
+                    context,
+                    getVariable: (name) => context?.getVariable?.(name)
+                });
+                
+                if (result && result.element) {
+                    return result.element;
+                }
+            }
+            
+            return null;
+            
+        } catch (error) {
+            console.warn(`Element finding failed for ${selector}:`, error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Check if element is interactable
+     */
+    async isElementInteractable(element) {
+        try {
+            const isVisible = await element.isVisible();
+            const isEnabled = await element.isEnabled();
+            const boundingBox = await element.boundingBox();
+            
+            return isVisible && isEnabled && boundingBox && boundingBox.width > 0 && boundingBox.height > 0;
+        } catch (error) {
+            return false;
         }
     }
 

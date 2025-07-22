@@ -243,24 +243,53 @@ const VariableEditorModal: React.FC<VariableEditorModalProps> = ({
   onSave
 }) => {
   const [variables, setVariables] = useState<Variable[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && automation) {
-      // Load variables from automation
-      const loadedVariables = automation.variables || [];
-      console.log('📋 Loading variables for editing:', loadedVariables);
+      console.log('📋 VariableEditorModal opened for automation:', automation.id);
       
-      // Convert to simple format
-      const simpleVariables = loadedVariables.map((v: any, index: number) => ({
-        id: v.id || `var_${index}`,
-        name: v.name || `Variable ${index + 1}`,
-        value: v.value || v.currentValue || v.originalValue || '',
-        type: v.type || 'text'
-      }));
-      
-      setVariables(simpleVariables);
+      // Check if automation has variables property
+      if (automation.variables && automation.variables.length > 0) {
+        // Load variables from automation object
+        console.log('📋 Loading variables from automation object:', automation.variables);
+        const simpleVariables = automation.variables.map((v: any, index: number) => ({
+          id: v.id || `var_${index}`,
+          name: v.name || `Variable ${index + 1}`,
+          value: v.value || v.currentValue || v.originalValue || '',
+          type: v.type || 'text'
+        }));
+        setVariables(simpleVariables);
+        setError(null);
+      } else {
+        // Variables not available in automation object, fetch from server
+        console.log('📋 Variables not found in automation object, fetching from server...');
+        fetchVariablesFromServer(automation.id);
+      }
     }
   }, [isOpen, automation]);
+
+  const fetchVariablesFromServer = async (automationId: string) => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Create a temporary WebSocket connection to fetch variables
+      // Note: In a real implementation, you might want to pass the WebSocket from the parent
+      console.log('📋 Requesting variables for automation:', automationId);
+      
+      // For now, we'll indicate that variables need to be fetched
+      // The parent component should handle this by passing a proper WebSocket or fetch function
+      setError('Variables not loaded. Please extract variables first using the Extract button.');
+      setVariables([]);
+    } catch (err) {
+      console.error('❌ Error fetching variables:', err);
+      setError('Failed to load variables. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -312,7 +341,36 @@ const VariableEditorModal: React.FC<VariableEditorModalProps> = ({
         </ModalHeader>
 
         <ModalBody>
-          {variables.length === 0 ? (
+          {isLoading ? (
+            <EmptyState>
+              <div className="icon">⚙️</div>
+              <h3>Loading Variables...</h3>
+              <p>Please wait while we fetch the variables for this automation.</p>
+            </EmptyState>
+          ) : error ? (
+            <EmptyState>
+              <div className="icon">⚠️</div>
+              <h3>Variables Not Available</h3>
+              <p>{error}</p>
+              <p style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>
+                Try using the "Extract" button on the automation to generate variables from recorded steps.
+              </p>
+              <button 
+                onClick={() => fetchVariablesFromServer(automation.id)}
+                style={{
+                  marginTop: '15px',
+                  padding: '8px 16px',
+                  background: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                🔄 Retry Loading
+              </button>
+            </EmptyState>
+          ) : variables.length === 0 ? (
             <EmptyState>
               <div className="icon">🔧</div>
               <h3>No Variables Found</h3>

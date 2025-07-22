@@ -1,12 +1,10 @@
 import React from 'react';
 import styled, { keyframes } from 'styled-components';
-import { Card } from '../ui/Card';
-import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 
 const PanelContainer = styled.aside`
-  width: 400px;
-  min-width: 400px;
+  width: 320px;
+  min-width: 320px;
   background: white;
   border-right: 1px solid var(--neutral-200);
   display: flex;
@@ -15,7 +13,7 @@ const PanelContainer = styled.aside`
   
   @media (max-width: 768px) {
     position: fixed;
-    left: -400px;
+    left: -320px;
     top: 64px;
     height: calc(100vh - 64px);
     z-index: 10;
@@ -48,20 +46,6 @@ const SectionTitle = styled.h3`
   gap: var(--space-2);
 `;
 
-const AutomationCard = styled.div`
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  
-  &:hover {
-    border-color: #3b82f6;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  }
-`;
 
 const AutomationTitle = styled.h4`
   font-size: 14px;

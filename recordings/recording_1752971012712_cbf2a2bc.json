@@ -1,0 +1,147 @@
+{
+  "id": "recording_1752971012712_cbf2a2bc",
+  "name": "Debug Test Recording",
+  "description": "Advanced automation recorded on 19/07/2025, 21:23:32",
+  "version": "2.0",
+  "type": "advanced_recording",
+  "steps": [],
+  "variables": [],
+  "layers": {
+    "screenshots": [
+      {
+        "id": "recording_start",
+        "description": "Initial page state",
+        "timestamp": 1752971012942,
+        "size": 5366,
+        "viewport": {
+          "width": 1024,
+          "height": 768
+        }
+      },
+      {
+        "id": "recording_end",
+        "description": "Final page state",
+        "timestamp": 1752971015806,
+        "size": 5366,
+        "viewport": {
+          "width": 1024,
+          "height": 768
+        }
+      }
+    ],
+    "domSnapshots": [
+      {
+        "id": "recording_start",
+        "description": "Initial DOM state",
+        "timestamp": 1752971012949,
+        "snapshot": {
+          "forms": [],
+          "inputs": [],
+          "buttons": [],
+          "links": [],
+          "structure": {
+            "title": "",
+            "url": "about:blank",
+            "elementCount": 3
+          }
+        }
+      }
+    ],
+    "context": [
+      {
+        "eventType": "recording_start",
+        "timestamp": 1752971012793,
+        "url": "about:blank",
+        "title": "",
+        "viewport": {
+          "width": 1024,
+          "height": 768
+        },
+        "cookies": [],
+        "localStorage": {},
+        "performance": {
+          "timestamp": 1752971012808,
+          "navigation": {
+            "loadEventEnd": 610.7000000476837,
+            "domContentLoadedEventEnd": 609.3000000715256,
+            "responseEnd": 609.1000000238419
+          },
+          "paint": [],
+          "memory": {
+            "usedJSHeapSize": 10000000,
+            "totalJSHeapSize": 10000000
+          }
+        }
+      },
+      {
+        "eventType": "recording_end",
+        "timestamp": 1752971015719,
+        "url": "about:blank",
+        "title": "",
+        "viewport": {
+          "width": 1024,
+          "height": 768
+        },
+        "cookies": [],
+        "localStorage": {},
+        "performance": {
+          "timestamp": 1752971015732,
+          "navigation": {
+            "loadEventEnd": 610.7000000476837,
+            "domContentLoadedEventEnd": 609.3000000715256,
+            "responseEnd": 609.1000000238419
+          },
+          "paint": [],
+          "memory": {
+            "usedJSHeapSize": 10000000,
+            "totalJSHeapSize": 10000000
+          }
+        }
+      }
+    ],
+    "performance": [],
+    "metadata": {
+      "recordingId": "recording_1752971012712_cbf2a2bc",
+      "sessionId": "1752971004688_9l5wiatv1",
+      "automationName": "Debug Test Recording",
+      "startTime": 1752971012712,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "initialUrl": "about:blank",
+      "timezone": "America/Sao_Paulo",
+      "language": "en-US",
+      "platform": "Win32",
+      "endTime": 1752971015806,
+      "duration": 3094,
+      "actionCount": 0,
+      "screenshotCount": 2,
+      "domSnapshotCount": 1
+    }
+  },
+  "insights": {
+    "totalDuration": 3094,
+    "actionBreakdown": {
+      "mouse": 0,
+      "keyboard": 0,
+      "touch": 0,
+      "navigation": 0
+    },
+    "variableTypes": {},
+    "screenshotCoverage": 2,
+    "pagesCovered": 1,
+    "formInteractions": 0
+  },
+  "createdAt": 1752971012712,
+  "duration": 3094,
+  "actionCount": 0,
+  "variableCount": 0,
+  "playbackOptions": {
+    "delayBetweenSteps": 1000,
+    "screenshotComparison": true,
+    "adaptiveWaiting": true,
+    "contextValidation": true
+  }
+}

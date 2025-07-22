@@ -116,18 +116,26 @@ const ProgressBar = styled.div`
 
 const ProgressFill = styled.div<{ progress: number; status: string }>`
   height: 100%;
-  background: ${props => {
-    switch (props.status) {
-      case 'running': return '#3b82f6';
-      case 'paused': return '#f59e0b';
-      case 'completed': return '#10b981';
-      case 'failed': return '#ef4444';
-      default: return '#6b7280';
-    }
-  }};
+  background: #6b7280;
   width: ${props => props.progress}%;
   transition: width 0.3s ease;
-  ${props => props.status === 'running' ? `animation: ${pulse} 2s infinite;` : ''}
+  
+  &.running {
+    background: #3b82f6;
+    animation: ${pulse} 2s infinite;
+  }
+  
+  &.paused {
+    background: #f59e0b;
+  }
+  
+  &.completed {
+    background: #10b981;
+  }
+  
+  &.failed {
+    background: #ef4444;
+  }
 `;
 
 const StepInfo = styled.div`
@@ -430,6 +438,7 @@ const ExecutionStatusDisplay: React.FC<ExecutionStatusDisplayProps> = ({
             <ProgressFill 
               progress={executionStatus.progress} 
               status={executionStatus.status}
+              className={executionStatus.status}
             />
           </ProgressBar>
         </ProgressSection>

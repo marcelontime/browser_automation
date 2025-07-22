@@ -85,6 +85,13 @@ class StagehandAutomationEngine {
             
             this.page = this.stagehand.page;
             
+            // Set proper browser viewport size for better user experience
+            await this.page.setViewportSize({ 
+                width: 1920,  // Full HD width for modern web applications
+                height: 1080  // Full HD height for complete page visibility
+            });
+            console.log('📐 Set browser viewport to 1920x1080 for optimal user experience');
+            
             // Initialize robust element interaction system if available
             try {
                 this.robustInteraction = new RobustElementInteraction(this.page, {
@@ -1189,7 +1196,7 @@ class StagehandAutomationEngine {
 
         try {
             // Inject recording script into the page
-            await this.page.evaluateOnNewDocument(() => {
+            await this.page.addInitScript(() => {
                 // Store original methods
                 window._originalAddEventListener = EventTarget.prototype.addEventListener;
                 window._recordedEvents = [];
